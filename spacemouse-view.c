@@ -610,9 +610,16 @@ static int fix_control(P window, Q ignored) {
   return 1;
 }
 __declspec(dllimport) P MonitorFromWindow(P, U);
-__declspec(dllimport) int GetMonitorInfoW(P, P);
 __declspec(dllimport) int IsIconic(P);
 __declspec(dllimport) int SetWindowPos(P, P, int, int, int, int, U);
+static void center_owned_rect(const int *rect, const int *parent, int *x,
+                              int *y) {
+  int width = rect[2] - rect[0], height = rect[3] - rect[1];
+  int available_x = parent[2] - parent[0] - width;
+  int available_y = parent[3] - parent[1] - height;
+  *x = parent[0] + (available_x > 0 ? available_x / 2 : 0);
+  *y = parent[1] + (available_y > 0 ? available_y / 2 : 0);
+}
 static int fix_window(P window, Q ignored) {
   (void)ignored;
   U pid = 0;
@@ -623,19 +630,13 @@ static int fix_window(P window, Q ignored) {
   int rect[4];
   if (owner && !IsIconic(window) && GetWindowRect(window, rect) &&
       rect[2] > rect[0] && rect[3] > rect[1] && !MonitorFromWindow(window, 0)) {
-    struct {
-      U size;
-      int monitor[4], work[4];
-      U flags;
-    } info = {0};
-    info.size = sizeof(info);
-    if (GetMonitorInfoW(MonitorFromWindow(owner, 2), &info)) {
-      int width = rect[2] - rect[0], height = rect[3] - rect[1];
-      int x = info.work[0], y = info.work[1];
-      if (width < info.work[2] - x)
-        x += (info.work[2] - x - width) / 2;
-      if (height < info.work[3] - y)
-        y += (info.work[3] - y - height) / 2;
+    int parent[4];
+    if (GetWindowRect(owner, parent) && parent[2] > parent[0] &&
+        parent[3] > parent[1]) {
+      /* Wine can report a monitor work area at x=8600 while the owner is
+       * visible. Use the owner's rectangle so recovery cannot repeat there. */
+      int x, y;
+      center_owned_rect(rect, parent, &x, &y);
       if (SetWindowPos(window, 0, x, y, 0, 0, 0x15))
         say("Recovered an off-screen owned window.\r\n");
     }

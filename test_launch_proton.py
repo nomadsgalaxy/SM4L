@@ -44,6 +44,24 @@ with tempfile.TemporaryDirectory() as tmp:
     cad=Path(env['SOLIDWORKS_PROTON_STATE'])/'prefix/pfx/drive_c/Program Files/Dassault Systemes/SOLIDWORKS Apps 2026/SOLIDWORKS/sldworks.exe'
     cad.parent.mkdir(parents=True,exist_ok=True);cad.touch()
     wrapper=launcher.with_name('launch_solidworks.sh')
+    # A running CAD process or concurrent launch must stop before server startup.
+    import fcntl
+    gate = root/'pgrep'
+    gate.write_text('#!/bin/sh\nexit "${FAKE_CAD_RUNNING:-1}"\n')
+    gate.chmod(0o755)
+    env['PATH'] = str(root)+os.pathsep+os.environ['PATH']
+    server_capture = Path(str(capture)+'.server')
+    server_capture.unlink(missing_ok=True)
+    env['FAKE_CAD_RUNNING'] = '0'
+    blocked = subprocess.run([wrapper],env=env,capture_output=True,text=True)
+    assert blocked.returncode == 1 and 'already running' in blocked.stderr
+    assert not server_capture.exists()
+    env['FAKE_CAD_RUNNING'] = '1'
+    with (Path(env['SOLIDWORKS_PROTON_STATE'])/'cad-launch.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        blocked = subprocess.run([wrapper],env=env,capture_output=True,text=True)
+        assert blocked.returncode == 1 and 'already in progress' in blocked.stderr
+        assert not server_capture.exists()
     subprocess.run([wrapper,'part with spaces.SLDPRT'],env=env,check=True)
     assert json.loads(capture.read_text())['args']==[str(cad),'part with spaces.SLDPRT']
     # Exercise automatic bridge startup without connecting to hardware.

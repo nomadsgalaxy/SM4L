@@ -9,6 +9,18 @@ if (( $# )); then shift; fi
 [[ -f "$exe" ]] || { echo "Executable not found: $exe" >&2; exit 2; }
 exe="$(realpath -- "$exe")"
 state="${SOLIDWORKS_PROTON_STATE:-${XDG_DATA_HOME:-$HOME/.local/share}/solidworks-proton}"
+# Refuse another CAD launch before starting a server or any helper.
+case "$(basename -- "$exe")" in
+  sldworks.exe|SWXDesktopLauncher.exe|ENOPLMCSAClient.exe)
+    mkdir -p "$state"
+    exec 9>"$state/cad-launch.lock"
+    flock -n 9 || { echo "A SOLIDWORKS launch is already in progress." >&2; exit 1; }
+    if pgrep -x sldworks.exe >/dev/null; then
+      echo "SOLIDWORKS is already running. Close it before launching again." >&2
+      exit 1
+    fi
+    ;;
+esac
 mkdir -p "$state/logs"
 log_dir="$(mktemp -d "$state/logs/run-XXXXXX")"
 export WINEPREFIX="$state/prefix" GAMEID=umu-default

@@ -344,7 +344,7 @@ Keep runtime logs and dumps local, since they can contain credentials or launch 
 
 ## UI compatibility helper
 
-The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. It restores checkbox/radio labels through the classic painter and brings fully off-screen owned dialogs back onto the owner's monitor. See [the findings](FINDINGS.md) for what was verified and what remains.
+The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. It restores checkbox/radio labels through the classic painter and brings fully off-screen owned dialogs back over the owner's window. See [the findings](FINDINGS.md) for what was verified and what remains.
 
 For an already running CAD session:
 

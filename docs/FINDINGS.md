@@ -114,3 +114,19 @@ A reproducible benchmark now runs with python3 -B spacemouse.py --benchmark. It 
 Next experiment: compare Wine's client-side and server-side 2D drawing for sldworks.exe only. Wine 10 reads ClientSideGraphics from HKCU\Software\Wine\AppDefaults\sldworks.exe\X11 Driver at startup. That key was absent. Test ClientSideGraphics=N after saving current geometry and restarting CAD; roll back by deleting only that value. The setting has not been applied yet. Keep the existing OpenGL pipeline setting, host server, WebView authentication and SpaceMouse intact.
 
 References: [FeatureStatistics](https://help.solidworks.com/2017/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IFeatureManager~FeatureStatistics.html), [EnableFeatureTreeWindow](https://help.solidworks.com/2024/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IFeatureManager~EnableFeatureTreeWindow.html), [Wine 10 X11 configuration](https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winex11.drv/x11drv_main.c).
+
+## Off-screen modal recovery correction — 2026-10-07
+
+Saving appeared blocked again. Native inspection found Move Confirmation at x=8600 and Performance Evaluation behind it; the main CAD window was disabled. Moving both over the main window exposed the external-relations confirmation. Anthony then saved and closed CAD normally. No dialog choice or save was performed by the helper.
+
+The automatic recovery repeatedly logged moves while using Wine's reported monitor work area. Centering over the visible owner's rectangle recovered the dialogs. The UI add-in now uses that rectangle instead of the monitor work area, preserving size and activation state. The placement check covers the observed coordinates, a negative-coordinate owner, and an oversized dialog. Live manual recovery and saving are confirmed; the updated automatic path still needs a fresh off-screen dialog event.
+
+The subsequent CAD-only ClientSideGraphics=N experiment produced a completely black startup prompt. Native text inspection recovered the platform-launch warning, but no timing comparison was possible. The value was deleted and the experiment rejected; do not add it to installation defaults. A normal launch without a part argument is being verified after rollback.
+
+## Desktop OOM and launch discipline — 2026-10-07
+
+Anthony reported that systemd-oomd killed KWin at 14:41:41 after RAM and swap filled. His investigation attributed roughly 10 GB RAM and 15 GB swap to Xwayland, with four SOLIDWORKS test instances and their web helpers still running. These crash figures come from his report; the exact allocation leak has not yet been independently profiled. Repeated launch attempts without stopping the old processes contributed to the problem.
+
+Stopped the dedicated prefix with wineserver -k after Anthony confirmed no test instance held unsaved work. A subsequent process check found no sldworks.exe, about 20 GB available RAM and about 4 GB allocated swap. No further CAD launch was attempted. The earlier desktop crash also invalidated the X11 authentication context; Wine reported Invalid MIT-MAGIC-COOKIE-1. Refresh the live desktop environment before future GUI work.
+
+The shared wrapper now checks for an existing sldworks.exe and holds a nonblocking launch lock before starting its server or helpers. This covers our CAD and vendor-launcher commands. The website's independently running Windows service bypasses this shell guard: click Open once and check processes before retrying. Close an existing instance before another launch. The check is deliberately conservative across prefixes. Tests verify both rejection paths occur before server startup. Single-instance control reduces amplification; it does not prove that one instance cannot leak memory.
