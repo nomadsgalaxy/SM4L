@@ -282,6 +282,103 @@ static U check(OBJ *app) {
   return 0;
 }
 #ifndef SM4L_ADDIN
+__declspec(dllimport) H SafeArrayGetLBound(P, U, int *);
+__declspec(dllimport) H SafeArrayGetUBound(P, U, int *);
+__declspec(dllimport) H SafeArrayAccessData(P, P *);
+__declspec(dllimport) H SafeArrayUnaccessData(P);
+static int benchmark(OBJ *app) {
+  VAR doc = {0}, view = {0}, result = {0}, manager = {0}, stats = {0},
+      names = {0}, times = {0};
+  H h = view_of(app, &doc, &view);
+  if (h < 0) {
+    report(h);
+    return 1;
+  }
+  Q start = GetTickCount64();
+  h = call(doc.val.ptr, L"GraphicsRedraw2", 1, &result);
+  say("Redraw ms: ");
+  milliseconds(GetTickCount64() - start);
+  report(h);
+  VariantClear(&result);
+  VAR top = {0};
+  top.vt = 11;
+  top.val.num = -1;
+  start = GetTickCount64();
+  h = invoke(doc.val.ptr, L"ForceRebuild3", 1, &top, 1, &result);
+  say("Full rebuild ms: ");
+  milliseconds(GetTickCount64() - start);
+  report(h);
+  if (h < 0 || result.vt != 11 || !result.val.num) {
+    if (h >= 0)
+      h = (H)0x80004005;
+    goto done;
+  }
+  VariantClear(&result);
+  h = call(doc.val.ptr, L"FeatureManager", 2, &manager);
+  if (h < 0 || manager.vt != 9)
+    goto done;
+  h = call(manager.val.ptr, L"FeatureStatistics", 2, &stats);
+  if (h < 0 || stats.vt != 9)
+    goto done;
+  h = call(stats.val.ptr, L"Refresh", 1, &result);
+  if (h < 0)
+    goto done;
+  VariantClear(&result);
+  h = call(stats.val.ptr, L"FeatureNames", 2, &names);
+  if (h < 0)
+    goto done;
+  h = call(stats.val.ptr, L"FeatureUpdateTimes", 2, &times);
+  if (h < 0)
+    goto done;
+  int nl, nh, tl, th;
+  P nd = 0, td = 0;
+  if (names.vt != 0x2008 || times.vt != 0x2005 ||
+      SafeArrayGetLBound(names.val.ptr, 1, &nl) < 0 ||
+      SafeArrayGetUBound(names.val.ptr, 1, &nh) < 0 ||
+      SafeArrayGetLBound(times.val.ptr, 1, &tl) < 0 ||
+      SafeArrayGetUBound(times.val.ptr, 1, &th) < 0 || nh < nl || th < tl ||
+      nh - nl != th - tl || nh - nl > 10000) {
+    h = (H)0x80070057;
+    goto done;
+  }
+  h = SafeArrayAccessData(names.val.ptr, &nd);
+  if (h < 0)
+    goto done;
+  h = SafeArrayAccessData(times.val.ptr, &td);
+  if (h >= 0) {
+    for (int i = 0; i <= nh - nl; i++) {
+      W *name = ((W **)nd)[i];
+      char text[256];
+      U n = 0;
+      while (name && name[n] && n < 255) {
+        text[n] = name[n] < 128 ? (char)name[n] : '?';
+        n++;
+      }
+      text[n] = 0;
+      double seconds = ((double *)td)[i];
+      if (!(seconds >= 0 && seconds < 86400)) {
+        h = (H)0x80070057;
+        break;
+      }
+      say(text);
+      say(" feature ms: ");
+      milliseconds((Q)(seconds * 1000));
+    }
+    SafeArrayUnaccessData(times.val.ptr);
+  }
+  SafeArrayUnaccessData(names.val.ptr);
+done:
+  if (h < 0)
+    report(h);
+  VariantClear(&times);
+  VariantClear(&names);
+  VariantClear(&stats);
+  VariantClear(&manager);
+  VariantClear(&result);
+  VariantClear(&view);
+  VariantClear(&doc);
+  return h < 0 ? 1 : 0;
+}
 __declspec(dllimport) W *SysAllocString(const W *);
 void entry(void) {
   GUID cls;
@@ -295,8 +392,8 @@ void entry(void) {
     ExitProcess(2);
   for (U attempt = 0;; attempt++) {
     h = GetActiveObject(&cls, 0, (P *)&u);
-    if (h >= 0 || option(L"--check-view") || h != (H)0x800401e3 ||
-        attempt == 179)
+    if (h >= 0 || (option(L"--check-view") || option(L"--benchmark")) ||
+        h != (H)0x800401e3 || attempt == 179)
       break;
     if (!attempt)
       say("Waiting for SOLIDWORKS to start.\r\n");
@@ -316,6 +413,8 @@ void entry(void) {
     ExitProcess(4);
   if (option(L"--check-view"))
     ExitProcess(check(app));
+  if (option(L"--benchmark"))
+    ExitProcess(benchmark(app));
   P process = OpenProcess(0x101000, 0, (U)pid.val.num);
   if (!process) {
     say("Cannot watch the CAD process.\r\n");

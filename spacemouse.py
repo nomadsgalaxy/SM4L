@@ -88,6 +88,7 @@ def register(wine, env, ui=False):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--benchmark', action='store_true', help='Time a redraw/rebuild and report feature timings; does not save or change dimensions')
     p.add_argument('--ui-only', action='store_true', help='Restore themed checkbox/radio painting without a SpaceMouse')
     p.add_argument('--check-view', action='store_true', help='Test navigation APIs on the active part, then reverse the movements')
     p.add_argument('--listen', action='store_true', help='Print device events without launching the CAD helper')
@@ -112,9 +113,9 @@ def main():
         p.error('Initialize the SOLIDWORKS prefix first')
     env = dict(os.environ, WINEPREFIX=str(prefix), WINEFSYNC='0', WINEESYNC='0', WINEDEBUG='-all')
     proton = Path(os.environ.get('PROTONPATH', str(Path.home()/'.local/share/Steam/compatibilitytools.d/UMU-Proton-10.0-4')))
-    command = [str(proton/'files/bin/wine64'), str(build(state, addin=not args.check_view and not args.listen, ui=args.ui_only))]
-    if args.check_view:
-        return subprocess.call(command+['--check-view'], env=env)
+    command = [str(proton/'files/bin/wine64'), str(build(state, addin=not args.check_view and not args.benchmark and not args.listen, ui=args.ui_only))]
+    if args.check_view or args.benchmark:
+        return subprocess.call(command+['--benchmark' if args.benchmark else '--check-view'], env=env)
     if args.ui_only:
         with (state/'ui-compat.lock').open('a') as lock:
             try:

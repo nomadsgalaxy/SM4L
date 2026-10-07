@@ -96,3 +96,21 @@ Current UI DLL: C:\sm4l-ui-compat-v2.dll, class {BB75177C-6799-4F57-9B75-10931D6
 Anthony asked about using the Linux file chooser. KDE kdialog is installed and supports --getsavefilename. A bridge could pass its selected path back into SOLIDWORKS' Save As field while preserving CAD format/options/overwrite handling. That integration is feasible but not implemented yet.
 
 Primary references: [Wine theme implementation](https://github.com/wine-mirror/wine/blob/master/dlls/uxtheme/system.c), [SetWindowTheme](https://learn.microsoft.com/en-us/windows/win32/api/uxtheme/nf-uxtheme-setwindowtheme), and [KDE dialog documentation](https://develop.kde.org/docs/administration/kdialog/).
+
+## 2026-10-07 — modeling performance investigation
+
+Anthony reports delays when changing geometry, such as extruding a sketch. An external redraw took 28–212 ms across samples; full rebuilds roughly 350–719 ms. An in-process probe measured three rebuilds at 436–440 ms, with 320–350 ms of UI-thread CPU time. FeatureStatistics reported Fillet2 40 ms, Sketch1 5 ms, Fillet1 5 ms, Cut-Extrude1 4 ms, Boss-Extrude1 3 ms and Sketch2 2 ms. These describe the current part and session, not an isolated new extrusion or a Windows comparison.
+
+Suppressing EnableFeatureTree made the rebuild call much faster (88–104 ms in the first comparison), but restoring the tree cost another 492–613 ms. That is deferred work, not a verified overall speedup. Direct WM_SETREDRAW batching also failed to improve total time consistently. Classic tree styles and application-wide visual styles did not establish a reliable speedup; application styles were restored. Classic tree styling remains in the live diagnostic session and resets with CAD restart. No permanent performance workaround has been shipped.
+
+A bounded instruction sample during rebuild was dominated by Wine win32u UI/GDI entry points: NtUserMessageCall, NtUserSetWindowPos, NtGdiStretchBlt, NtUserCallNextHookEx, compatible DC/bitmap creation, object deletion, BitBlt and AlphaBlend. Sampling itself perturbs timing and counts syscall entry points; it identifies a UI/GDI lead rather than a precise CPU attribution.
+
+The main thread was scheduled on efficiency cores. Restricting it to CPUs 0–3 changed external rebuild samples from 447/563/414 ms to 399/403/399 ms (about 11% lower median). This did not meet the experiment's 15% threshold, so original affinity was restored. The laptop is already in performance power mode; turbo is enabled. Advanced verification on rebuild is already off. Recent memory pressure was zero, despite almost all swap being allocated; do not infer active swapping solely from swap usage.
+
+CAD's embedded Chromium GPU process used about 49% of one core in a five-second sample. It loaded SwiftShader and also had Intel GPU activity. That is separate from the login WebView2 workaround, and it has not been proven to cause extrusion delays. No browser process was killed or paused.
+
+A reproducible benchmark now runs with python3 -B spacemouse.py --benchmark. It performs one redraw and full rebuild, then reports per-feature timings via the supported API. It does not save, alter dimensions or suppress features; rebuilding can mark a document modified.
+
+Next experiment: compare Wine's client-side and server-side 2D drawing for sldworks.exe only. Wine 10 reads ClientSideGraphics from HKCU\Software\Wine\AppDefaults\sldworks.exe\X11 Driver at startup. That key was absent. Test ClientSideGraphics=N after saving current geometry and restarting CAD; roll back by deleting only that value. The setting has not been applied yet. Keep the existing OpenGL pipeline setting, host server, WebView authentication and SpaceMouse intact.
+
+References: [FeatureStatistics](https://help.solidworks.com/2017/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IFeatureManager~FeatureStatistics.html), [EnableFeatureTreeWindow](https://help.solidworks.com/2024/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IFeatureManager~EnableFeatureTreeWindow.html), [Wine 10 X11 configuration](https://github.com/wine-mirror/wine/blob/wine-10.0/dlls/winex11.drv/x11drv_main.c).
