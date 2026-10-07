@@ -341,3 +341,15 @@ After patching, use the header backup as the test input. The directory check exp
 Rolling back only touches this prefix. Close CAD normally first. Rename `CATSysTS.dll.pre-swcompat` and `comctl32.before-header-guard.dll` back to their original names as needed. To undo the settings, remove the `sldworks.exe/comctl32` and WebView `dxgi`/`d3d11` override values, the two HKLM WebView arguments, and the WineBrowser `Browsers` value. The original installer media and source MSI are never changed. Only turn Enhanced graphics performance back on in the GUI when you're deliberately testing that path again.
 
 Keep runtime logs and dumps local, since they can contain credentials or launch URLs. This repo intentionally doesn't include the laptop's installed prefix or the signed-in Firefox profile.
+
+## UI compatibility helper
+
+The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. It restores checkbox/radio labels through the classic painter and brings fully off-screen owned dialogs back onto the owner's monitor. See [the findings](FINDINGS.md) for what was verified and what remains.
+
+For an already running CAD session:
+
+```bash
+python3 -B spacemouse.py --ui-only
+```
+
+Use the same prefix and Proton settings as the rest of this guide. To disable it for future menu launches, set SM4L_UI_COMPAT=0. An already loaded add-in stays until disabled in Tools → Add-Ins or CAD is restarted. Do not swap loaded DLL bytes expecting a hot reload. The helper does not select filenames, accept features, or press Save. Native KDE file chooser integration is still pending.

@@ -54,39 +54,41 @@ def publish(path, seq, motion):
         finally:
             temporary.unlink(missing_ok=True)
 
-def build(state, addin=False):
+def build(state, addin=False, ui=False):
     source = Path(__file__).with_name('spacemouse-view.c')
-    exe, obj = state/'spacemouse-view.exe', state/'spacemouse-view.obj'
+    stem = 'ui-compat' if ui else 'spacemouse-view'
+    exe, obj = state/(stem+'.exe'), state/(stem+'.obj')
     if not exe.exists() or exe.stat().st_mtime_ns < source.stat().st_mtime_ns:
         subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-builtin', '-c', str(source), '-o', str(obj)], check=True)
         libs = Path('/usr/lib/wine/x86_64-windows')
-        subprocess.run(['lld-link', '/entry:entry', '/subsystem:console', '/nodefaultlib', '/machine:x64', '/out:'+str(exe.with_suffix('.new.exe')), str(obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32'))], check=True)
+        subprocess.run(['lld-link', '/entry:entry', '/subsystem:console', '/nodefaultlib', '/machine:x64', '/out:'+str(exe.with_suffix('.new.exe')), str(obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'uxtheme'))], check=True)
         os.replace(exe.with_suffix('.new.exe'), exe)
     if addin:
-        dll = state/'prefix/pfx/drive_c/sm4l-spacemouse-v3.dll'
+        dll = state/'prefix/pfx/drive_c'/('sm4l-ui-compat-v2.dll' if ui else 'sm4l-spacemouse-v3.dll')
         if not dll.exists() or dll.stat().st_mtime_ns < source.stat().st_mtime_ns:
-            dll_obj = state/'spacemouse-addin.obj'
-            staged = state/'spacemouse-addin.new.dll'
-            subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-DSM4L_ADDIN', '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-fno-builtin', '-c', str(source), '-o', str(dll_obj)], check=True)
+            dll_obj = state/(stem+'-addin.obj')
+            staged = state/(stem+'-addin.new.dll')
+            subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-DSM4L_ADDIN', *(['-DSM4L_UI_ADDIN'] if ui else []), '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-fno-builtin', '-c', str(source), '-o', str(dll_obj)], check=True)
             libs = Path('/usr/lib/wine/x86_64-windows')
-            subprocess.run(['lld-link', '/dll', '/noentry', '/nodefaultlib', '/machine:x64', '/out:'+str(staged), str(dll_obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32'))], check=True)
+            subprocess.run(['lld-link', '/dll', '/noentry', '/nodefaultlib', '/machine:x64', '/out:'+str(staged), str(dll_obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'uxtheme'))], check=True)
             os.replace(staged, dll)
     return exe
 
-def register(wine, env):
-    guid = '{BB75177C-6799-4F57-9B75-10931D6421F6}'
+def register(wine, env, ui=False):
+    guid = '{BB75177C-6799-4F57-9B75-10931D6421FA}' if ui else '{BB75177C-6799-4F57-9B75-10931D6421F6}'
     classes = 'HKLM\\Software\\Classes\\CLSID\\'+guid+'\\InprocServer32'
     addin = 'HKLM\\Software\\SolidWorks\\Addins\\'+guid
-    entries = [(classes, None, 'REG_SZ', r'C:\sm4l-spacemouse-v3.dll'),
+    entries = [(classes, None, 'REG_SZ', r'C:\sm4l-ui-compat-v2.dll' if ui else r'C:\sm4l-spacemouse-v3.dll'),
                (classes, 'ThreadingModel', 'REG_SZ', 'Apartment'),
                (addin, None, 'REG_DWORD', '0'),
-               (addin, 'Title', 'REG_SZ', 'SM4L SpaceMouse'),
-               (addin, 'Description', 'REG_SZ', 'Linux SpaceMouse view navigation')]
+               (addin, 'Title', 'REG_SZ', 'SM4L UI compatibility' if ui else 'SM4L SpaceMouse'),
+               (addin, 'Description', 'REG_SZ', 'Restore radio and checkbox labels' if ui else 'Linux SpaceMouse view navigation')]
     for key, name, kind, value in entries:
         subprocess.run([wine, 'reg.exe', 'add', key, *(['/v', name] if name else ['/ve']), '/t', kind, '/d', value, '/f'], env=env, check=True, stdout=subprocess.DEVNULL)
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--ui-only', action='store_true', help='Restore themed checkbox/radio painting without a SpaceMouse')
     p.add_argument('--check-view', action='store_true', help='Test navigation APIs on the active part, then reverse the movements')
     p.add_argument('--listen', action='store_true', help='Print device events without launching the CAD helper')
     p.add_argument('--seconds', type=float, default=0, help='Stop after this many seconds; zero runs until Ctrl-C')
@@ -110,9 +112,17 @@ def main():
         p.error('Initialize the SOLIDWORKS prefix first')
     env = dict(os.environ, WINEPREFIX=str(prefix), WINEFSYNC='0', WINEESYNC='0', WINEDEBUG='-all')
     proton = Path(os.environ.get('PROTONPATH', str(Path.home()/'.local/share/Steam/compatibilitytools.d/UMU-Proton-10.0-4')))
-    command = [str(proton/'files/bin/wine64'), str(build(state, addin=not args.check_view and not args.listen))]
+    command = [str(proton/'files/bin/wine64'), str(build(state, addin=not args.check_view and not args.listen, ui=args.ui_only))]
     if args.check_view:
         return subprocess.call(command+['--check-view'], env=env)
+    if args.ui_only:
+        with (state/'ui-compat.lock').open('a') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return 0
+            register(command[0], env, ui=True)
+            return subprocess.call(command+['--load-ui-addin'], env=env)
     lib = C.CDLL(find_library('spnav') or 'libspnav.so.0')
     lib.spnav_poll_event.argtypes = [C.POINTER(Event)]
     lib.spnav_dev_name.argtypes = [C.c_char_p, C.c_int]

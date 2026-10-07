@@ -321,10 +321,13 @@ void entry(void) {
     say("Cannot watch the CAD process.\r\n");
     ExitProcess(4);
   }
-  if (option(L"--load-addin") || option(L"--unload-addin")) {
+  if (option(L"--load-addin") || option(L"--unload-addin") ||
+      option(L"--load-ui-addin")) {
     VAR file = {0}, result = {0};
     file.vt = 8;
-    file.val.ptr = SysAllocString(L"C:\\sm4l-spacemouse-v3.dll");
+    file.val.ptr = SysAllocString(option(L"--load-ui-addin")
+                                      ? L"C:\\sm4l-ui-compat-v2.dll"
+                                      : L"C:\\sm4l-spacemouse-v3.dll");
     if (!file.val.ptr)
       ExitProcess(5);
     h = invoke(app, option(L"--unload-addin") ? L"UnloadAddIn" : L"LoadAddIn",
@@ -342,7 +345,7 @@ void entry(void) {
     if (h < 0 || result.vt != 3 || (result.val.num != 0 && result.val.num != 2))
       ExitProcess(5);
     VariantClear(&result);
-    say("In-process SpaceMouse add-in loaded.\r\n");
+    say("In-process SM4L add-in loaded.\r\n");
     while (WaitForSingleObject(process, 500) == 0x102) {
     }
     CloseHandle(process);
@@ -406,10 +409,17 @@ static const GUID addin_iid = {
     0xeac5,
     0x4406,
     {0x86, 0x10, 0xb1, 0xda, 0x80, 0x5d, 0x92, 0x70}};
+#ifdef SM4L_UI_ADDIN
+static const GUID clsid = {0xbb75177c,
+                           0x6799,
+                           0x4f57,
+                           {0x9b, 0x75, 0x10, 0x93, 0x1d, 0x64, 0x21, 0xfa}};
+#else
 static const GUID clsid = {0xbb75177c,
                            0x6799,
                            0x4f57,
                            {0x9b, 0x75, 0x10, 0x93, 0x1d, 0x64, 0x21, 0xf6}};
+#endif
 static const GUID unknown_iid = {0, 0, 0, {0xc0, 0, 0, 0, 0, 0, 0, 0x46}};
 static const GUID factory_iid = {1, 0, 0, {0xc0, 0, 0, 0, 0, 0, 0, 0x46}};
 typedef struct AV {
@@ -429,7 +439,10 @@ typedef struct FV {
 static OBJ *cad;
 static Q timer;
 static P timer_window;
-static U cad_pid, last_sequence;
+static U cad_pid;
+#ifndef SM4L_UI_ADDIN
+static U last_sequence;
+#endif
 static int busy;
 __declspec(dllimport) Q SetTimer(P, Q, U, void (*)(P, U, Q, U));
 __declspec(dllimport) int KillTimer(P, Q);
@@ -468,6 +481,81 @@ static int same_guid(const GUID *a, const GUID *b) {
       return 0;
   return 1;
 }
+#ifdef SM4L_UI_ADDIN
+__declspec(dllimport) int EnumChildWindows(P, int (*)(P, Q), Q);
+__declspec(dllimport) int GetClassNameW(P, W *, int);
+__declspec(dllimport) long long GetWindowLongPtrW(P, int);
+__declspec(dllimport) P GetWindowTheme(P);
+__declspec(dllimport) H SetWindowTheme(P, const W *, const W *);
+__declspec(dllimport) int InvalidateRect(P, P, int);
+static int fix_control(P window, Q ignored) {
+  (void)ignored;
+  W name[16];
+  if (!IsWindowVisible(window) || GetClassNameW(window, name, 16) != 6 ||
+      name[0] != 'B' || name[1] != 'u' || name[2] != 't' || name[3] != 't' ||
+      name[4] != 'o' || name[5] != 'n')
+    return 1;
+  U type = (U)GetWindowLongPtrW(window, -16) & 15;
+  if ((type != 2 && type != 3 && type != 4 && type != 5 && type != 6 &&
+       type != 9) ||
+      !GetWindowTheme(window))
+    return 1;
+  /* Wine rejects an empty atom name. An unmatched nonempty class selects
+   * the classic painter without changing the control's behavior or state. */
+  H h = SetWindowTheme(window, L"SM4L_NoTheme", L"SM4L_NoTheme");
+  if (h >= 0) {
+    InvalidateRect(window, 0, 1);
+    say("Restored checkbox/radio painting.\r\n");
+  } else
+    report(h);
+  return 1;
+}
+__declspec(dllimport) P MonitorFromWindow(P, U);
+__declspec(dllimport) int GetMonitorInfoW(P, P);
+__declspec(dllimport) int IsIconic(P);
+__declspec(dllimport) int SetWindowPos(P, P, int, int, int, int, U);
+static int fix_window(P window, Q ignored) {
+  (void)ignored;
+  U pid = 0;
+  GetWindowThreadProcessId(window, &pid);
+  if (pid != cad_pid || !IsWindowVisible(window))
+    return 1;
+  P owner = GetWindow(window, 4);
+  int rect[4];
+  if (owner && !IsIconic(window) && GetWindowRect(window, rect) &&
+      rect[2] > rect[0] && rect[3] > rect[1] && !MonitorFromWindow(window, 0)) {
+    struct {
+      U size;
+      int monitor[4], work[4];
+      U flags;
+    } info = {0};
+    info.size = sizeof(info);
+    if (GetMonitorInfoW(MonitorFromWindow(owner, 2), &info)) {
+      int width = rect[2] - rect[0], height = rect[3] - rect[1];
+      int x = info.work[0], y = info.work[1];
+      if (width < info.work[2] - x)
+        x += (info.work[2] - x - width) / 2;
+      if (height < info.work[3] - y)
+        y += (info.work[3] - y - height) / 2;
+      if (SetWindowPos(window, 0, x, y, 0, 0, 0x15))
+        say("Recovered an off-screen owned window.\r\n");
+    }
+  }
+  EnumChildWindows(window, fix_control, 0);
+  return 1;
+}
+static void tick(P window, U message, Q id, U time) {
+  (void)message;
+  (void)id;
+  (void)time;
+  if (busy || !cad)
+    return;
+  busy = 1;
+  (void)window;
+  EnumWindows(fix_window, 0);
+  busy = 0;
+}
+#else
 static void tick(P window, U message, Q id, U time) {
   (void)window;
   (void)message;
@@ -511,6 +599,7 @@ static void tick(P window, U message, Q id, U time) {
   }
   busy = 0;
 }
+#endif
 static int object_refs = 1, factory_refs = 1, locks;
 static U object_add(P self) {
   (void)self;
@@ -564,13 +653,19 @@ static H connect(P self, OBJ *application, int cookie, short *out) {
     return (H)0x80004005;
   }
   cad_pid = (U)pid.val.num;
-  P log = CreateFileW(L"C:\\sm4l-spacemouse-addin.log", 0x40000000, 7, 0, 4,
-                      0x80, 0);
+#ifdef SM4L_UI_ADDIN
+  const W *log_path = L"C:\\sm4l-ui-compat.log";
+#else
+  const W *log_path = L"C:\\sm4l-spacemouse-addin.log";
+#endif
+  P log = CreateFileW(log_path, 0x40000000, 7, 0, 4, 0x80, 0);
   if (log != (P)-1) {
     output_handle = log;
     SetFilePointer(log, 0, 0, 2);
   }
+#ifndef SM4L_UI_ADDIN
   last_sequence = 0;
+#endif
   timer_window = 0;
   EnumWindows(pick_window, 0);
   if (!timer_window) {
@@ -582,12 +677,20 @@ static H connect(P self, OBJ *application, int cookie, short *out) {
   milliseconds(GetCurrentThreadId());
   say("CAD UI thread: ");
   milliseconds(GetWindowThreadProcessId(timer_window, 0));
+#ifdef SM4L_UI_ADDIN
+  timer = SetTimer(timer_window, 0x534d3455, 500, tick);
+#else
   timer = SetTimer(timer_window, 0x534d344c, 16, tick);
+#endif
   if (!timer) {
     disconnect(self, 0);
     return (H)0x80004005;
   }
+#ifdef SM4L_UI_ADDIN
+  say("SM4L UI compatibility connected.\r\n");
+#else
   say("SM4L in-process SpaceMouse connected.\r\n");
+#endif
   *out = -1;
   return 0;
 }

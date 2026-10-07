@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as tmp:
     server.parent.mkdir(parents=True)
     server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:]}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
     server.chmod(0o755)
-    env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0")
+    env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0", SM4L_UI_COMPAT="0")
     env.pop('PROTON_NO_FSYNC', None)
     env.pop('PROTON_NO_ESYNC', None)
     subprocess.run([launcher, exe, 'argument with spaces'], env=env, check=True)
@@ -62,6 +62,15 @@ with tempfile.TemporaryDirectory() as tmp:
     bridge = json.loads(capture.with_suffix('.bridge').read_text())
     assert bridge['server_started']
     assert bridge['args'] == ['python3', '-B', str(launcher.with_name('spacemouse.py'))]
+    env.update(SM4L_SPACEMOUSE='0', SM4L_UI_COMPAT='1')
+    capture.with_suffix('.bridge').unlink()
+    subprocess.run([wrapper], env=env, check=True)
+    for attempt in range(100):
+        if capture.with_suffix('.bridge').exists(): break
+        time.sleep(.01)
+    ui = json.loads(capture.with_suffix('.bridge').read_text())
+    assert ui['server_started']
+    assert ui['args'] == ['python3', '-B', str(launcher.with_name('spacemouse.py')), '--ui-only']
     data = root/'menu with spaces'
     env['XDG_DATA_HOME'] = str(data)
     subprocess.run(['python3', str(launcher.with_name('install_desktop.py'))], env=env, check=True)

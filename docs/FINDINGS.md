@@ -80,3 +80,19 @@ Moving the calls into my own `ISwAddin` brought frame work down to about 80–10
 The add-in only uses public API calls and registers inside the prefix. I needed HKLM class registration to get the real connection callback. With HKCU only, the load reported success but the callback never came, so that success meant nothing. CAD also kept the old DLL loaded after an unload/reload, so each experimental build got a new class and DLL identity. That let me test new code without restarting CAD and losing an unsaved part. The current v3 identity is in the [SpaceMouse guide](SPACEMOUSE.md).
 
 Input dropped to zero once when the USB connection dropped, and reconnecting fixed it. A timed reader also ran out while I was testing. Continuous navigation now leaves out `--seconds`, and the menu launcher starts the bridge after the host Wine server it depends on. General slowness while sketching and editing models is a separate open issue.
+
+## 2026-10-07 — radio/checkbox labels and an off-screen Save As dialog
+
+Native control inspection found the missing Fillet labels intact. The affected controls use ordinary checkbox/radio styles, not owner drawing. Selecting Full preview changed BM_GETCHECK from 0 to 1, and the viewport showed yellow fillet preview curves. The feature was not accepted by our helper.
+
+SetWindowTheme with empty strings returned 0x8007007B both externally and on CAD's UI thread. Wine's implementation stores names with AddAtomW, which rejects an empty name. Using an unmatched nonempty name, SM4L_NoTheme, succeeded on the UI thread and restored Full preview, Partial preview, No preview, Tangent propagation, Show selection toolbar and Multi Radius Fillet labels in the captured panel. This establishes the workaround for those controls; it does not resolve every missing group header or layout problem.
+
+The launcher now loads a separate UI compatibility add-in from the same bootstrap source. It checks visible checkbox/radio controls every 500 ms, selects the classic painter only when a theme is present, and invalidates them once. It leaves control types, checked state, and model geometry alone. It works without a SpaceMouse or spacenavd.
+
+Save As was visible to Win32 but positioned at x=8600, outside the screen. Moving it over CAD revealed a normal working dialog. Anthony saved examplepart.SLDPRT in the project folder (93,822 bytes); the live CAD title then showed the filename without an unsaved marker. Reopening that file has not been tested. The add-in also recenters owned windows that overlap no monitor, using the owner's monitor work area without resizing them or activating Save. The manual recovery is verified; automatic recovery on another occurrence remains to be observed.
+
+Current UI DLL: C:\sm4l-ui-compat-v2.dll, class {BB75177C-6799-4F57-9B75-10931D6421FA}. The standalone mode is python3 -B spacemouse.py --ui-only. The menu enables it by default; SM4L_UI_COMPAT=0 disables it for future launches. Restart CAD to remove an already loaded UI fix. Registration is scoped to the dedicated prefix. Logs are C:\sm4l-ui-compat.log and the launch's ui-compat.log.
+
+Anthony asked about using the Linux file chooser. KDE kdialog is installed and supports --getsavefilename. A bridge could pass its selected path back into SOLIDWORKS' Save As field while preserving CAD format/options/overwrite handling. That integration is feasible but not implemented yet.
+
+Primary references: [Wine theme implementation](https://github.com/wine-mirror/wine/blob/master/dlls/uxtheme/system.c), [SetWindowTheme](https://learn.microsoft.com/en-us/windows/win32/api/uxtheme/nf-uxtheme-setwindowtheme), and [KDE dialog documentation](https://develop.kde.org/docs/administration/kdialog/).
