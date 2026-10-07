@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as tmp:
     server.parent.mkdir(parents=True)
     server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:]}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
     server.chmod(0o755)
-    env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton))
+    env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0")
     env.pop('PROTON_NO_FSYNC', None)
     env.pop('PROTON_NO_ESYNC', None)
     subprocess.run([launcher, exe, 'argument with spaces'], env=env, check=True)
@@ -40,4 +40,37 @@ with tempfile.TemporaryDirectory() as tmp:
     subprocess.run([launcher, '--check'], env=env, check=True)
     assert json.loads(capture.read_text())['args'] == ['--version']
     assert subprocess.run([launcher, root / 'missing.exe'], env=env, capture_output=True).returncode == 2
-print('Proton launcher checks passed')
+    env['FAKE_SERVER_EXIT']='0'
+    cad=Path(env['SOLIDWORKS_PROTON_STATE'])/'prefix/pfx/drive_c/Program Files/Dassault Systemes/SOLIDWORKS Apps 2026/SOLIDWORKS/sldworks.exe'
+    cad.parent.mkdir(parents=True,exist_ok=True);cad.touch()
+    wrapper=launcher.with_name('launch_solidworks.sh')
+    subprocess.run([wrapper,'part with spaces.SLDPRT'],env=env,check=True)
+    assert json.loads(capture.read_text())['args']==[str(cad),'part with spaces.SLDPRT']
+    # Exercise automatic bridge startup without connecting to hardware.
+    hook = root/'nohup'
+    hook.write_text('#!/usr/bin/python3\nimport json,os,sys\nfrom pathlib import Path\np=Path(os.environ["CAPTURE"]);p.with_suffix(".bridge").write_text(json.dumps({"args":sys.argv[1:],"server_started":Path(str(p)+".server").exists()}))\n')
+    hook.chmod(0o755)
+    env['PATH'] = str(root)+os.pathsep+os.environ['PATH']
+    env['SM4L_SPACEMOUSE'] = '1'
+    Path(str(capture)+'.server').unlink()
+    subprocess.run([wrapper], env=env, check=True)
+    import time
+    for attempt in range(100):
+        if capture.with_suffix('.bridge').exists():
+            break
+        time.sleep(.01)
+    bridge = json.loads(capture.with_suffix('.bridge').read_text())
+    assert bridge['server_started']
+    assert bridge['args'] == ['python3', '-B', str(launcher.with_name('spacemouse.py'))]
+    data = root/'menu with spaces'
+    env['XDG_DATA_HOME'] = str(data)
+    subprocess.run(['python3', str(launcher.with_name('install_desktop.py'))], env=env, check=True)
+    entry = data/'applications/SM4L-solidworks.desktop'
+    assert f'Exec="{wrapper}"' in entry.read_text()
+    assert 'Name=SOLIDWORKS for Makers' in entry.read_text()
+    from install_desktop import desktop_entry
+    assert '%%' in desktop_entry(Path('/tmp/100%/launch.sh'))
+    import shutil
+    if shutil.which('desktop-file-validate'):
+        subprocess.run(['desktop-file-validate', str(entry)], check=True)
+print('Proton launcher and CAD menu checks passed')

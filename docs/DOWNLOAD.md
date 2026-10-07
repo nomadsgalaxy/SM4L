@@ -1,12 +1,12 @@
-# Download the same installer from Linux
+# Download the installer from Linux
 
-The 3DEXPERIENCE site hid desktop SOLIDWORKS options when it detected Linux. Selecting a Chrome–Windows label in the site did not reliably reveal the desktop app. Our working browser setup used a dedicated Firefox profile whose actual HTTP User-Agent **and** JavaScript platform/OS identity reported Windows.
+The 3DEXPERIENCE site hides the desktop SOLIDWORKS options when it sees a Linux browser. Picking a Chrome–Windows label in the site didn't reliably bring the app back. What worked was a dedicated Firefox profile where both the HTTP User-Agent **and** the JavaScript platform/OS fields say Windows.
 
-You can prepare this profile and download the full media before installing Proton or starting the Windows launcher service. The service matters later for the browser's installed-app Open action.
+You can do this before installing Proton or starting the Windows launcher service. The launcher service only matters later, for the browser's Open button.
 
-## 1. Open your own Makers platform with the Windows Firefox profile
+## 1. Open your Makers platform in the Windows Firefox profile
 
-Clone this repository and install Firefox and Python if needed:
+Clone the repo and install Firefox and Python if you don't have them:
 
 ```bash
 git clone https://github.com/nomadsgalaxy/SM4L.git
@@ -14,9 +14,9 @@ cd SM4L
 sudo pacman -S --needed firefox python
 ```
 
-Find your **own 3DEXPERIENCE platform URL** from your Makers welcome email, account links, or the dashboard you already use. Use that exact HTTPS `*.3ds.com` URL, including its dashboard fragment if provided. Do not use another customer's tenant address or guess the region.
+You need **your own 3DEXPERIENCE platform URL**. It's in your Makers welcome email, your account links, or the dashboard you already use. Use that exact HTTPS `*.3ds.com` address, including the dashboard fragment if it has one. Don't use someone else's tenant address and don't guess the region.
 
-Run this from a terminal in your graphical Linux session. Replace the placeholder URL:
+Run this from a terminal inside your graphical session, with your URL in place of the placeholder:
 
 ```bash
 export SOLIDWORKS_PROTON_STATE="$HOME/.local/share/solidworks-proton"
@@ -24,7 +24,7 @@ export SOLIDWORKS_PLATFORM_URL='https://YOUR-PLATFORM-HOST.3dexperience.3ds.com/
 python3 -B launch_windows_browser.py
 ```
 
-This opens a separate Firefox instance/profile at:
+That opens a separate Firefox instance with its own profile at:
 
 ```text
 ~/.local/share/solidworks-proton/browser-windows-firefox
@@ -39,20 +39,20 @@ The script sets these built-in Firefox overrides:
 | `general.oscpu.override` | `Windows NT 10.0; Win64; x64` |
 | `general.appversion.override` | `5.0 (Windows)` |
 
-A short-lived local page checks both the request header and `navigator.userAgent`, `navigator.platform` and `navigator.oscpu`, then sends that window to your platform. The terminal should print **Verified Windows identity**. The helper stays running while Firefox is open; that is expected.
+Before it sends you to the platform, a short-lived local page checks the request header plus `navigator.userAgent`, `navigator.platform` and `navigator.oscpu`. The terminal should print **Verified Windows identity**. The helper keeps running while Firefox is open. That's expected.
 
-Sign in normally in this new Firefox window. It has separate cookies from your normal Linux browser. Use it for the remaining download steps. The normal browser default and existing Firefox profiles are unchanged.
+Sign in normally in the new window. It has its own cookies, separate from your usual Linux browser, so use it for the rest of the download. Your default browser and any existing Firefox profiles stay as they were.
 
-On the laptop, Firefox 157.0 passed the identity check, and Anthony confirmed that SOLIDWORKS Design appeared in the authenticated dashboard. Other Firefox versions need the same check; do not assume the override worked if the helper reports a mismatch.
+On my laptop, Firefox 157.0 passed the identity check and SOLIDWORKS Design showed up in the signed-in dashboard. If you're on a different Firefox version, the same check still has to pass. If the helper reports a mismatch, the override didn't take.
 
-## 2. Use the full-media download route
+## 2. Get the full media
 
-This was the vendor route used to obtain the laptop installer:
+This is the route I used to get the installer:
 
-1. Open **Compass** in the authenticated platform.
+1. Open **Compass** on the signed-in platform.
 2. Go to **All Apps**.
 3. Open **Members Control Center**.
-4. Choose **Configure Apps Installation**, the gear tab.
+4. Choose **Configure Apps Installation** (the gear tab).
 5. Select **3DEXPERIENCE SOLIDWORKS Desktop**.
 6. Select **Full**, then **Download**.
 
@@ -62,15 +62,15 @@ The full download was listed at about **26.6 GB** and saved as:
 SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip
 ```
 
-That is the **R2026x HotFix 4.13 Windows64 platform/desktop full media** used in this repository. It is different from the later **SOLIDWORKS Design 2026 SP3.0** payload downloaded by the Windows Installation Manager.
+That's the **R2026x HotFix 4.13 Windows64 platform/desktop full media** this repo is built around. It's not the same thing as the **SOLIDWORKS Design 2026 SP3.0** payload that the Windows Installation Manager downloads later.
 
-The initial Welcome/app list did not show the desktop app consistently. Use the Members Control Center installation/download view rather than treating an empty Welcome list as proof that the download is unavailable.
+The Welcome page's app list didn't show the desktop app consistently for me. Go through the Members Control Center instead of taking an empty Welcome list to mean the download isn't there.
 
-If Dassault offers only a different release, record its filename. The patches here pin the exact original files and will refuse another build. We do not host or reconstruct the vendor ZIP, and changing a filename does not make a new release compatible.
+If Dassault only offers you a different release, write down its filename. The patches here are pinned to the exact original files and will refuse anything else. I don't host or rebuild the vendor ZIP, and renaming a file won't make a different release compatible.
 
-## 3. Confirm the download and extract it
+## 3. Check the download and extract it
 
-Wait for the browser download to finish completely. The laptop ZIP had 649 entries and expanded to 28,567,505,049 bytes. The later CAD download and installed application need additional space.
+Let the download finish completely. My ZIP had 649 entries and unpacked to 28,567,505,049 bytes. The CAD download and the installed app need more space on top of that.
 
 From the SM4L checkout:
 
@@ -82,7 +82,7 @@ export MEDIA_1="$SOLIDWORKS_PROTON_STATE/media/SOLIDWORKS_3DEXP_Desktop.Full.Win
 python3 -B test_patch_offline_installer.py "$MEDIA_1"
 ```
 
-Use your actual download location if Firefox saved elsewhere. `MEDIA_1` must contain the original `setup.exe`, `setup_noUAC.exe` and `media.db`; inspect the extracted folder if the vendor's layout differs.
+Change the path if Firefox saved the ZIP somewhere else. `MEDIA_1` has to point at the folder with the original `setup.exe`, `setup_noUAC.exe` and `media.db`. If the vendor's layout looks different, check the extracted folder.
 
 The supported original `setup.exe` SHA256 is:
 
@@ -90,15 +90,15 @@ The supported original `setup.exe` SHA256 is:
 c3aeeecdb030e124c74eb9a4897ff08c60122e2ed7bc2058b313c8c4cddb222a
 ```
 
-The check verifies the original installer copies and exact one-byte patch location. It is not a checksum of the entire ZIP. Keep the original media unchanged; [the replication guide](REPLICATE.md) creates a separately named patched setup copy later.
+The check confirms the original installer files and the exact byte the patch will change. It isn't a checksum of the whole ZIP. Leave the original media alone. [The replication guide](REPLICATE.md) makes a separately named patched copy later.
 
-## If the Linux block remains
+## If the site still hides the app
 
-- Make sure the platform is open in the **dedicated Windows-identifying Firefox window**, not Vivaldi or another normal Linux browser. The window looks like ordinary Firefox; the verified profile is what matters.
-- If you get **Identity mismatch**, close this dedicated Firefox instance and rerun the helper. Do not proceed based only on a site dropdown saying Chrome–Windows.
-- If it times out, check the terminal message and the private `browser-windows-firefox.log` under the state directory. The local check must load before the redirect can happen. Keep logs and profile cookies outside Git.
-- If the profile is already open, use that existing window. Close it before rerunning the setup helper so the new instance can own the profile.
-- If you see **Install/Open** later, that belongs to the Windows launcher handoff. A spinning Open button is a separate service/authentication problem; it does not mean the ZIP download is corrupt.
-- If the expected full-media controls still do not appear after verified Windows identity and normal sign-in, confirm the assigned Makers role and platform URL. Do not bypass authentication or licensing.
+- Make sure you're in the **dedicated Windows-identifying Firefox window**, not Vivaldi or your normal browser. It looks like regular Firefox. The profile is what matters.
+- If you get **Identity mismatch**, close that Firefox instance and run the helper again. Don't carry on just because a dropdown on the site says Chrome–Windows.
+- If it times out, read the terminal message and the private `browser-windows-firefox.log` in the state directory. The local check page has to load before the redirect happens. Keep logs and profile cookies out of Git.
+- If the profile is already open, use that window. Close it before rerunning the helper so the new instance can take over the profile.
+- If you see **Install/Open** later, that's the Windows launcher handoff. A spinning Open button is a service or sign-in problem. It doesn't mean your ZIP is corrupt.
+- If the full-media controls still don't appear after a verified Windows identity and a normal sign-in, check that your Makers role is assigned and that the platform URL is right. Don't try to get around sign-in or licensing.
 
-After extraction, continue with [Replicate the working laptop setup](REPLICATE.md). Leave the authenticated dedicated profile available for the CAD login flow, or close it normally and reuse it later; closing Firefox does not delete the profile.
+Once it's extracted, carry on with [the replication guide](REPLICATE.md). You can leave the signed-in profile open for the CAD login later, or close it and come back to it. Closing Firefox doesn't delete the profile.

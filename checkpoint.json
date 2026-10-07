@@ -15,7 +15,9 @@
     "lld": "23.1.1-1.1",
     "python": "3.14.7-2",
     "mesa": "3:26.2.4-1",
-    "vulkan-intel": "3:26.2.4-1"
+    "vulkan-intel": "3:26.2.4-1",
+    "spacenavd": "1.3.1-1",
+    "libspnav": "1.2-1.1"
   },
   "renderer": "Mesa Intel(R) Graphics (MTL)",
   "webview2": "154.0.4258.62",
@@ -26,7 +28,7 @@
   "modeling_evidence": "Anthony reported creating a cube and chamfering it after disabling Enhanced graphics performance and restarting",
   "header_probe": "Valid layout succeeded; null layout crashed before guard and returned FALSE after guard with native,builtin override",
   "save_reopen_verified": false,
-  "space_mouse_verified": false,
+  "space_mouse_verified": true,
   "browser_flicker_remaining": true,
   "fresh_prefix_replication_verified": false,
   "required_source_hashes": {
@@ -36,5 +38,20 @@
     "spatialiop.zip": "3a5584aa82d821a7426da919b02d309cea1afd7f9e540c3e23a9eab43358ccda",
     "comctl32.dll": "d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676"
   },
-  "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771"
+  "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771",
+  "space_mouse_device": "3Dconnexion SpaceMouse Pro USB 046d:c62b",
+  "space_mouse_evidence": "Anthony confirmed smooth navigation and correct tilt after the in-process batched redraw fix; focused view updates measured 14\u201318 ms",
+  "space_mouse_buttons_verified": false,
+  "start_menu_verified": true,
+  "space_mouse_addin": {
+    "dll": "C:\\sm4l-spacemouse-v3.dll",
+    "clsid": "{BB75177C-6799-4F57-9B75-10931D6421F6}",
+    "view_frame_ms": [
+      14,
+      18
+    ],
+    "input_hz": 30,
+    "buttons_mapped": false,
+    "final_tuning_verified": true
+  }
 }

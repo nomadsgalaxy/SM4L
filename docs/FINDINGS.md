@@ -1,72 +1,82 @@
-# What made the laptop work
+# What it took to get the laptop working
 
-This record describes the experiments completed on October 6–7, 2026. The commands and final settings are collected in [REPLICATE.md](REPLICATE.md). Native geometry experiments preceded this work but were not used to run the desktop; they are excluded from SM4L.
+These are the experiments from October 6–7, 2026. The commands and final settings are collected in [REPLICATE.md](REPLICATE.md). Before this, I spent some time on native geometry experiments, but none of that was used to actually run SOLIDWORKS, so it's not in SM4L.
 
-## Verified fixes
+## Fixes that stuck
 
-| Failure | Evidence | Change retained in the working setup |
+| What broke | What I found | What I kept |
 | --- | --- | --- |
-| Installer demands IE10 despite IE11 registry values | The bootstrap looks up missing WinINet `HttpWebSocketReceive` | Whole-file-hash-checked, one-byte branch change in a separate offline setup copy |
-| Login Manager registration fails | Real Framework64 RegAsm missing after the media's .NET 4.8.1 DISM attempt | Proton Winetricks installs real Microsoft .NET 4.8; vendor registration returns zero |
-| Object Modeler dictionary compilation fails | CATSysTS looks up absent NTDLL `RtlIsNameInExpression`; compiler returns one | Our proxy implements real Unicode/DOS wildcard matching; compiler and vendor installation return zero |
-| CAD MSI cannot unzip Spatial InterOp | ZIP-shell `SHCreateItemFromParsingName` fails with `0x8000ffff` | Extract real ZIP with CRC/size checks; disable only that redundant action in a separate MSI copy |
-| MSI succeeds but no CAD core exists | Initial optional-feature list omitted the core | Exact direct MSI experiment uses `ADDLOCAL=ALL`; actual CAD executable installed |
-| Linux browser hides the desktop app | Selecting a Windows label/user-agent alone did not provide the app | Dedicated Firefox Windows user-agent plus Win32/Windows navigator overrides; live header and navigator check |
-| CAD login opens default Linux browser | WineBrowser routes links to the system browser | Prefix-only handler opens the dedicated Firefox profile on the host |
-| WebView2 prerequisite error | Vendor loader exists, runtime and registration absent | Real Microsoft x64 Evergreen standalone runtime installed |
-| WebView startup breakpoint | Restricted event handle has EVENT_MODIFY_STATE; fsync lookup also requires SYNCHRONIZE | Keep fsync/esync off; actual event probe signals and observes the event |
-| WebView GPU process launch error 39 | Native child-memory write returns 299; server's process_vm_writev returns EPERM across user namespaces | Start this prefix's persistent Wine server on the host before UMU; allocation/write/read roundtrip passes through UMU |
-| Host server exhausts descriptors | Server inherited limit 2048 and reached it | Raise soft limit to existing hard limit before starting server; laptop budget 2097152 |
-| Embedded login stays blank | DXVK divide-by-zero; builtin D3D11/WARP has no usable renderer | WebView-only builtin D3D overrides plus HKLM SwiftShader arguments; real login/error HTML renders |
-| CAD crashes during UI startup | Two native CAD minidumps: access violation at COMCTL32+0x2ac1e, reading address 8, null HDLAYOUT | Prefix-local version-pinned guard returns FALSE for null; valid layout probe still succeeds; CAD-only native,builtin override |
-| CAD window opens with black viewport | Menus/options/feature tree render; Intel Mesa renderer detected; Enhanced graphics enabled | Clear Enhanced graphics performance, apply and restart; Anthony models a cube and chamfer |
+| Installer demands IE10 even with IE11 registry values | The bootstrap looks up a missing WinINet `HttpWebSocketReceive` export | A one-byte branch change in a separate copy of the offline setup, checked against the whole file's hash |
+| Login Manager registration fails | The real Framework64 RegAsm was missing after the media's .NET 4.8.1 DISM attempt | Real Microsoft .NET 4.8 through Proton's Winetricks. Vendor registration then returns zero |
+| Object Modeler dictionary compilation fails | CATSysTS looks up an NTDLL `RtlIsNameInExpression` that isn't there, and the compiler returns one | My proxy implements real Unicode/DOS wildcard matching. The compiler and the vendor install both return zero |
+| CAD MSI can't unzip Spatial InterOp | ZIP-shell `SHCreateItemFromParsingName` fails with `0x8000ffff` | Extract the real ZIP with CRC/size checks and turn off only that redundant action in a separate MSI copy |
+| MSI succeeds but there's no CAD core | The first optional-feature list left the core out | The direct MSI install uses `ADDLOCAL=ALL`, which installed the actual CAD executable |
+| Linux browser hides the desktop app | A Windows label or user-agent on its own didn't bring the app back | Dedicated Firefox profile with a Windows user-agent plus Win32/Windows navigator overrides, verified live |
+| CAD login opens the default Linux browser | WineBrowser sends links to the system browser | A prefix-only handler opens the dedicated Firefox profile on the host |
+| WebView2 prerequisite error | The vendor loader exists, but the runtime and its registration don't | Installed Microsoft's real x64 Evergreen standalone runtime |
+| WebView startup breakpoint | A restricted event handle has EVENT_MODIFY_STATE, but the fsync lookup also needs SYNCHRONIZE | Keep fsync/esync off. The event probe signals and sees the event |
+| WebView GPU process launch error 39 | Native child-memory write returns 299, because the server's process_vm_writev returns EPERM across user namespaces | Start this prefix's persistent Wine server on the host before UMU. The allocate/write/read roundtrip then passes through UMU |
+| Host server runs out of descriptors | The server inherited a limit of 2048 and hit it | Raise the soft limit to the existing hard limit before starting the server. The laptop's budget is 2097152 |
+| Embedded login stays blank | DXVK divide-by-zero, and builtin D3D11/WARP has no usable renderer | Builtin D3D overrides for WebView only, plus HKLM SwiftShader arguments. The real login and error pages render |
+| CAD crashes during UI startup | Two native CAD minidumps: access violation at COMCTL32+0x2ac1e reading address 8, a null HDLAYOUT | A prefix-local, version-pinned guard returns FALSE on null. The valid-layout probe still passes. The native,builtin override applies to CAD only |
+| CAD opens with a black viewport | Menus, options and the feature tree render. Intel Mesa renderer, Enhanced graphics on | Turn off Enhanced graphics performance, apply and restart. After that I modeled a cube and chamfered it |
 
-The directory matcher passed 191 independently extracted ReactOS API expectation cases during the investigation. The repository check also covers DOS wildcard cases, Unicode, custom uppercase tables, import preservation, backup preservation and unsupported-build refusal.
+During the investigation, the directory matcher passed 191 expectation cases pulled independently from ReactOS's API tests. The repo's own check also covers DOS wildcards, Unicode, custom uppercase tables, import preservation, backup preservation, and refusing unsupported builds.
 
 ## Browser-to-launcher handoff
 
-The website's Install/Open controls depend on the real Windows launcher service, the installed applications, authentication, browser identity and trusted-platform confirmation. They are not proof that CAD is licensed or visible.
+The website's Install/Open buttons depend on a lot at once: the real Windows launcher service, the installed apps, sign-in, browser identity, and the trusted-platform confirmation. Seeing those buttons doesn't prove CAD is licensed or visible.
 
-The service was named `3DEXPERIENCELauncher`. Its endpoint is `http://127.0.0.1:20250/`. Initially it accepted TCP but hung on HTTP; stopping and starting that service with the desktop environment restored HTTP 200. The tray initially had no X11 driver, and the backbone could not find the Windows `DSLauncherTray` window. Restarting the real tray interactively made backbone `postStatus` succeed and allowed SWXDesktopLauncher to start.
+The service is `3DEXPERIENCELauncher`, listening at `http://127.0.0.1:20250/`. At first it accepted TCP but hung on HTTP. Stopping and restarting it with the desktop environment available got HTTP 200 back. The tray also started with no X11 driver, so the backbone couldn't find the Windows `DSLauncherTray` window. Restarting the real tray interactively made the backbone's `postStatus` succeed, and SWXDesktopLauncher started.
 
-After a reboot, the service's backbone could still be headless. Our manual recovery preserved the service and launched the same vendor backbone interactively with its current original named-pipe arguments. The exact procedure was:
+After a reboot, the service's backbone could still come up headless. My manual recovery left the service alone and started the same vendor backbone interactively with its current named-pipe arguments:
 
-1. Identify the prefix-owned service backbone from its actual mapped executable; confirm it has no winex11 mapping. Do not select an unrelated prefix or an already interactive backbone.
-2. Read that live process's NUL-separated `/proc/<pid>/cmdline` in memory. The observed original argv had three entries: the vendor executable and two pipe arguments. Do not print or save them.
-3. Start the installed `3DEXPERIENCELauncherBackbone.exe` through the same Proton/prefix and desktop environment with the original argv entries after the executable, unchanged.
-4. Keep the service and interactive tray running, click Open once, and resolve the ordinary vendor trust prompt. A restarted service has a new pipe; do not reuse an old captured one.
+1. Find the backbone that belongs to this prefix's service by its mapped executable, and confirm it has no winex11 mapping. Don't pick a backbone from another prefix or one that's already interactive.
+2. Read that live process's NUL-separated `/proc/<pid>/cmdline` in memory. The argv I saw had three entries: the vendor executable and two pipe arguments. Don't print or save them.
+3. Start the installed `3DEXPERIENCELauncherBackbone.exe` through the same Proton prefix and desktop environment, with those original argv entries after the executable, unchanged.
+4. Keep the service and the interactive tray running, click Open once, and accept the normal vendor trust prompt. A restarted service gets a new pipe, so never reuse an old one.
 
-Some fresh authenticated launches likewise needed an interactive replay. For the observed ENOPLMCSAClient child, Wine rewrote the argv: argv[0] was empty, argv[1] was `SWXDesktopLauncher`, the original launcher arguments occupied argv[2:16], argv[3] was `-Prfctx`, and argv[12] was `-RegistryUrl`. We retained those 14 original arguments in memory and started the actual platform SWXDesktopLauncher through our interactive launcher. Extra appended ENO arguments were excluded. This is evidence for that specific observed command layout, not a generic parser for another release.
+Some fresh signed-in launches also needed an interactive replay. For the ENOPLMCSAClient child I saw, Wine had rewritten the argv: argv[0] was empty, argv[1] was `SWXDesktopLauncher`, the original launcher arguments sat in argv[2:16], argv[3] was `-Prfctx`, and argv[12] was `-RegistryUrl`. I kept those 14 original arguments in memory and started the platform's real SWXDesktopLauncher through my interactive launcher, leaving out the extra ENO arguments tacked on the end. That's what this one command layout looked like. It's not a general parser for other releases.
 
-Those argv values include private account/platform context and launch tickets. They were not saved in SM4L. Replaying laptop arguments on the desktop would be incorrect; capture only a fresh desktop request if the same headless failure recurs. This recovery still needs a portable, tested implementation. Direct `sldworks.exe` launch worked after the authentication and runtime fixes.
+Those arguments carry private account and platform context plus launch tickets, so none of them are saved in SM4L. Replaying the laptop's arguments on the desktop would be wrong. If the same headless failure shows up there, capture a fresh request on that machine. This recovery still needs a proper, tested implementation. Once sign-in and the runtime fixes were in place, launching `sldworks.exe` directly worked.
 
-## Experiments we dropped or did not prove
+## What I tried and dropped (or couldn't prove)
 
-- Changing IE registry numbers did not supply the missing WinINet export.
-- `setup_noUAC.exe` hit the vendor elevation requirement; the normal administrator setup copy was used.
-- The media's .NET 4.8.1 DISM result did not supply RegAsm. We do not claim full .NET 4.8.1 support.
-- A WebView Windows 11 app override did not fix startup; the original Proton win7 override was restored.
-- A fresh WebView user-data-folder policy did not fix the blank panel; that override was removed.
-- A local headless DOM smoke test was inconclusive. Native rendered login/error pages were the real rendering evidence.
-- Tenant casing was not established as the cause of the server-access error. No casing patch was applied.
-- License error 1002 appeared, but its exact resolution is unknown. We did not patch licensing or authenticate with invented success.
-- The installer record selected W4Y Ultimate, while the running app is Professional for Makers. An uninstall/reinstall was proposed and its wizard opened, but none was completed before CAD launched.
-- CAD Software OpenGL was greyed out before disabling Enhanced graphics performance. We did not enable it; the final successful report followed disabling Enhanced graphics and restarting.
+- Changing the IE registry numbers didn't supply the missing WinINet export.
+- `setup_noUAC.exe` ran into the vendor's elevation requirement, so I used the normal administrator setup copy.
+- The media's .NET 4.8.1 DISM install didn't supply RegAsm. I'm not claiming full .NET 4.8.1 support.
+- A Windows 11 app override for WebView didn't fix startup, so I put Proton's original win7 override back.
+- A fresh WebView user-data-folder policy didn't fix the blank panel. I removed it.
+- A local headless DOM smoke test was inconclusive. The real evidence was the login and error pages rendering natively.
+- I never showed that tenant casing caused the server-access error, so there's no casing patch.
+- License error 1002 showed up, and I don't know exactly what fixed it. I didn't patch licensing or fake a successful sign-in.
+- The installer record picked W4Y Ultimate, but the app that runs is Professional for Makers. An uninstall/reinstall came up and its wizard got opened, but it wasn't finished before CAD launched.
+- CAD's Software OpenGL option was greyed out before I turned off Enhanced graphics performance. I didn't enable it. The run that worked came after turning off Enhanced graphics and restarting.
 
-## Validation and remaining work
+## Validation and what's left
 
-Native screenshots confirmed the Professional for Makers window and Part1. Anthony reported that the restarted application worked and that he created a cube and chamfered it. This is the first real desktop modeling success, separate from the earlier native geometry probe.
+Native screenshots show the Professional for Makers window and Part1. After the restart, the app worked and I created a cube and chamfered it. That's the first real modeling success, separate from the earlier native geometry probe.
 
-The copied setup checks passed again before the first SM4L upload: launcher, browser profile, browser routing, ZIP refusal checks, matcher/import checks, both offline installer copies, and header-guard branch/hash checks. The header, event and child-memory native probes passed during the investigation under their documented final conditions. The CAD MSI helper was built and its successful installed payload was verified; do not rerun it merely to test the repository.
+Before the first SM4L upload, the copied setup checks passed again: launcher, browser profile, browser routing, ZIP refusal checks, matcher/import checks, both offline installer copies, and the header guard's branch and hash checks. The header, event and child-memory probes passed during the investigation under the final conditions described here. I built the CAD MSI helper and verified the payload it installed. There's no need to rerun it just to test the repo.
 
-Save/reopen, SpaceMouse and fresh desktop replication remain unverified. Embedded browser elements still flash. These are the next tests; the successful CAD graphics setting should stay in place while investigating browser rendering.
+Still open: save and reopen, and a fresh replication on the desktop. Embedded browser panels still flash. Keep the working CAD graphics setting in place while chasing that.
 
-Native X11 automation was only a research aid and is excluded from the setup. On this KDE/Wayland desktop, requested coordinates 400,400 produced actual 500,500; scaling the target by 1/1.25 corrected interaction. Do not hard-code that laptop factor on another monitor or machine.
+Native X11 automation was only a research aid and isn't part of the setup. On this KDE/Wayland desktop, asking for 400,400 landed at 500,500, and scaling targets by 1/1.25 fixed it. Don't hard-code that factor on another monitor or machine.
 
-## Primary references
+## References
 
 - [UMU launcher](https://github.com/Open-Wine-Components/umu-launcher), [Proton](https://github.com/ValveSoftware/Proton).
 - [Microsoft RtlIsNameInExpression contract](https://learn.microsoft.com/en-us/windows/win32/devnotes/rtlisnameinexpression), [ReactOS API test expectations](https://github.com/reactos/reactos/blob/master/modules/rostests/apitests/ntdll/RtlIsNameInExpression.c).
 - [Wine Common Controls header implementation](https://github.com/wine-mirror/wine/blob/master/dlls/comctl32/header.c), [Microsoft HDM_LAYOUT](https://learn.microsoft.com/en-us/windows/win32/controls/hdm-layout).
 - [WebView2 feature flags](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags), [WebView policies](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-webview-policies), [Chromium SwiftShader](https://github.com/chromium/chromium/blob/main/docs/gpu/swiftshader.md).
 - [SOLIDWORKS OpenGL performance settings](https://help.solidworks.com/2026/english/SolidWorks/sldworks/c_Performance_Settings_with_OpenGL.htm?format=P).
+
+## SpaceMouse view performance (October 7, 2026)
+
+The Linux driver already supported my wired SpaceMouse Pro. A real COM attachment and `ActiveDoc`/`ActiveView` worked under Proton, and every view method passed the native checks. The first socket-to-COM bridge moved the view, but it was slow and jittery, averaging 194 ms per update. Panning with the regular mouse was responsive, so the delay was in my bridge and not in CAD navigation generally.
+
+Moving the calls into my own `ISwAddin` brought frame work down to about 80–100 ms. Most of what was left came from redrawing after each navigation call separately. Turning off view refresh during the grouped calls, restoring it, and doing one redraw got a focused pan/rotation test down to 14–18 ms. The reader now publishes at up to 30 Hz with a short low-pass filter, and stops immediately when you let go. Movement is smooth and the physical tilt goes the right way. Button mapping and large-assembly performance haven't been tested.
+
+The add-in only uses public API calls and registers inside the prefix. I needed HKLM class registration to get the real connection callback. With HKCU only, the load reported success but the callback never came, so that success meant nothing. CAD also kept the old DLL loaded after an unload/reload, so each experimental build got a new class and DLL identity. That let me test new code without restarting CAD and losing an unsaved part. The current v3 identity is in the [SpaceMouse guide](SPACEMOUSE.md).
+
+Input dropped to zero once when the USB connection dropped, and reconnecting fixed it. A timed reader also ran out while I was testing. Continuous navigation now leaves out `--seconds`, and the menu launcher starts the bridge after the host Wine server it depends on. General slowness while sketching and editing models is a separate open issue.

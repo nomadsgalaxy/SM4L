@@ -27,6 +27,10 @@ mkdir -p "$state/prefix/pfx"
 # Match UMU's large descriptor budget for the shared server.
 ulimit -n "$(ulimit -Hn)"
 WINEPREFIX="$state/prefix/pfx" WINEFSYNC="$fsync" WINEESYNC="$esync" "$server" -p || { status=$?; [[ "$status" == 2 ]] || exit "$status"; }
+# The CAD shortcut enables navigation after the host server is safely running.
+if [[ "${SM4L_SPACEMOUSE:-0}" == 1 ]]; then
+  nohup python3 -B "$(dirname -- "$(realpath -- "$0")")/spacemouse.py" >"$log_dir/spacemouse.log" 2>&1 </dev/null &
+fi
 export PROTON_LOG=1 PROTON_LOG_DIR="$log_dir"
 cd -- "$(dirname -- "$exe")"
 exec "${UMU_RUN:-umu-run}" "$exe" "$@"

@@ -1,49 +1,49 @@
-# Replicate the working laptop setup on Arch Linux
+# Replicate the laptop setup on Arch Linux
 
-This is the route used on the laptop, with the final working settings collected in one place. Fresh-prefix replication on the desktop is pending. Some steps use the vendor GUI, and the browser-to-launcher handoff needed manual recovery during the investigation.
+This is the route I took on the laptop, with the final working settings in one place. I haven't replayed it on a fresh prefix yet. That's next, on the desktop. Some steps go through the vendor GUI, and the handoff from the browser to the launcher needed manual recovery along the way.
 
-## 1. Match the versions and obtain your own downloads
+## 1. Match the versions and get your own downloads
 
-The pinned components are:
+What I pinned:
 
-- Arch Linux x86_64; laptop renderer `Mesa Intel(R) Graphics (MTL)`.
-- UMU 1.4.4 upstream zipapp; UMU-Proton-10.0-4; sniper runtime `3.0.20260928.262393`.
+- Arch Linux x86_64. Laptop renderer `Mesa Intel(R) Graphics (MTL)`.
+- UMU 1.4.4 upstream zipapp, UMU-Proton-10.0-4, sniper runtime `3.0.20260928.262393`.
 - Full platform media `SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip`.
 - SOLIDWORKS Design 2026 SP3.0, MSI registered as `34.130.0150`.
-- Microsoft .NET 4.8 installed by Proton's Winetricks recipe.
+- Microsoft .NET 4.8, installed through Proton's Winetricks recipe.
 - Microsoft WebView2 x64 Evergreen runtime `154.0.4258.62`.
 
-Exact laptop package versions and supported file hashes are in [checkpoint.json](../checkpoint.json). The desktop GPU and installed package versions may differ; record them before changing anything.
+The exact laptop package versions and supported file hashes are in [checkpoint.json](../checkpoint.json). Your GPU and package versions will probably be different. Write them down before changing anything.
 
-If Linux hides the download, follow [Download the same installer from Linux](DOWNLOAD.md) first. It includes the tested Firefox identity setup, every download-menu step and media verification.
+If the site hides the download from Linux, start with [Download the installer from Linux](DOWNLOAD.md). It covers the Firefox identity setup, every menu step, and checking the media.
 
-The vendor's full download was under Compass → All Apps → Members Control Center → Configure Apps Installation → 3DEXPERIENCE SOLIDWORKS Desktop → Full. The site hid desktop options with a Linux browser identity. Step 7 configures Firefox if you need it for the download too. Sign in normally with your own account.
+The full download lives under Compass → All Apps → Members Control Center → Configure Apps Installation → 3DEXPERIENCE SOLIDWORKS Desktop → Full. The site hides the desktop options from a Linux browser. Step 7 sets up Firefox if you need it for the download too. Sign in normally with your own account.
 
-The full ZIP was about 28 GB. Allow space for the extracted platform media, the separate Design download, installed CAD, prerequisites, and temporary files. Keep all of these outside this repository.
+The full ZIP is about 28 GB. You'll also need room for the extracted media, the separate Design download, the installed CAD, prerequisites and temp files. Keep all of it outside this repo.
 
-Install the host tools needed for the scripts and rebuilding the small Windows helpers:
+Install the host tools the scripts use and the ones needed to rebuild the small Windows helpers:
 
 ```bash
 sudo pacman -S --needed git python firefox clang lld wine unzip cabextract curl
 ```
 
-Host `wine` supplies the import libraries used by the builds below. Run the application with the pinned Proton Wine, not `/usr/bin/wine`. Verify these library files exist before compiling:
+Host `wine` is only here for its import libraries, which the builds below link against. Run the app itself with the pinned Proton Wine, not `/usr/bin/wine`. Check these libraries exist before compiling:
 
 ```bash
 ls /usr/lib/wine/x86_64-windows/lib{kernel32,ntdll,user32,comctl32,msi}.a
 ```
 
-For the same UMU route, download `umu-launcher-1.4.4-zipapp.tar` from the [official 1.4.4 release](https://github.com/Open-Wine-Components/umu-launcher/releases/tag/1.4.4). Extract its `umu-run` into `~/.local/bin` and make it executable. The executable we used has SHA256:
+To use the same UMU, download `umu-launcher-1.4.4-zipapp.tar` from the [official 1.4.4 release](https://github.com/Open-Wine-Components/umu-launcher/releases/tag/1.4.4), extract `umu-run` into `~/.local/bin` and make it executable. The one I used has this SHA256:
 
 ```text
 d0005a58602041229cc467dab03dc0c0b9e8cce09a8145b16b7683244cf17804
 ```
 
-Install [UMU-Proton-10.0-4](https://github.com/Open-Wine-Components/umu-proton/releases/tag/UMU-Proton-10.0-4) under `~/.local/share/Steam/compatibilitytools.d/`. UMU downloaded and verified that release on the laptop. Our DLL guard is pinned to it; a newer Proton is a separate experiment. UMU manages the Steam runtime; its current download may differ from the recorded sniper build.
+Install [UMU-Proton-10.0-4](https://github.com/Open-Wine-Components/umu-proton/releases/tag/UMU-Proton-10.0-4) under `~/.local/share/Steam/compatibilitytools.d/`. On the laptop, UMU downloaded and verified it for me. My DLL guard is pinned to this release, so a newer Proton is its own experiment. UMU manages the Steam runtime, so what it downloads today might not match the sniper build I recorded.
 
-## 2. Set the isolated environment
+## 2. Set up the isolated environment
 
-From the cloned SM4L directory, use the same terminal for the steps below:
+From the cloned SM4L directory, and in the same terminal for everything below:
 
 ```bash
 export SM4L_ROOT="$PWD"
@@ -58,9 +58,9 @@ chmod +x launch_proton.sh open_windows_firefox.sh
 ./launch_proton.sh --check
 ```
 
-Use your current desktop session's `DISPLAY`, `XAUTHORITY` and, where present, `WAYLAND_DISPLAY`. Run from a normal terminal in that session. Do not copy the laptop's `/run/user/.../xauth_*` filename to the desktop.
+Use your current session's `DISPLAY`, `XAUTHORITY` and, if you have it, `WAYLAND_DISPLAY`. Run from a normal terminal in that session. Don't copy the laptop's `/run/user/.../xauth_*` filename over to another machine.
 
-`launch_proton.sh` starts the persistent server on the host before UMU makes a container. It raises the soft descriptor limit to the existing hard limit and keeps fsync/esync off. Every launch into this prefix must use the same Proton and synchronization settings.
+`launch_proton.sh` starts the persistent Wine server on the host before UMU builds its container. It raises the soft descriptor limit to the hard limit and keeps fsync/esync off. Every launch into this prefix has to use the same Proton and sync settings.
 
 Initialize the fresh prefix through the launcher:
 
@@ -68,9 +68,9 @@ Initialize the fresh prefix through the launcher:
 ./launch_proton.sh "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0
 ```
 
-Fresh initialization with this final launcher has not yet been replayed on another machine. Confirm that `$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c` exists before continuing. On the laptop, `prefix/pfx` is a symlink to `.`; do not create a second unrelated Wine prefix.
+Nobody has run a fresh initialization with this final launcher on another machine yet. Check that `$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c` exists before moving on. On the laptop, `prefix/pfx` is a symlink to `.`. Don't make a second, unrelated Wine prefix.
 
-For registry commands and native probes, define this helper after initialization:
+For registry commands and native probes, define this helper once the prefix exists:
 
 ```bash
 pwine() {
@@ -80,30 +80,30 @@ pwine() {
 }
 ```
 
-If this prefix already has a container-owned server, close its CAD processes first and stop only that prefix's server once:
+If the prefix already has a server running inside the container, close its CAD processes first and stop only that prefix's server, once:
 
 ```bash
 WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
 ```
 
-Then use `launch_proton.sh` to start it again. Do not kill unrelated Wine prefixes or a session with unsaved work.
+Then start it again with `launch_proton.sh`. Don't kill other Wine prefixes or a session with unsaved work.
 
 ## 3. Install real .NET and use Windows 11 for the installer
 
-With the initialized host server still running:
+With the host server from initialization still running:
 
 ```bash
 "$UMU_RUN" winetricks -q dotnet48
 WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
 ./launch_proton.sh "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32/winecfg.exe" -v win11
-pwine 'C:windowsMicrosoft.NETFramework644.0.30319RegAsm.exe' /?
+pwine 'C:\windows\Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe' /?
 ```
 
-The .NET recipe must actually install the 64-bit RegAsm tool. On the laptop, the media's .NET 4.8.1 DISM installer returned success without supplying it; that attempt did not fix Login Manager registration. Winetricks' .NET 4.8 recipe did. Stop this prefix’s server after the recipe, since Winetricks can restart it inside the container. The next launcher call restores the host server and Windows 11 after Winetricks changes the Windows profile. The vendor Login Manager registration subsequently returned zero.
+The .NET recipe has to actually install the 64-bit RegAsm tool. On the laptop, the media's own .NET 4.8.1 DISM installer reported success without installing it, and Login Manager registration still failed. Winetricks' .NET 4.8 recipe fixed it. Stop the prefix's server after the recipe, because Winetricks can restart it inside the container. The next launcher call brings back the host server, and the winecfg call puts Windows 11 back after Winetricks changes it. After that, the vendor's Login Manager registration returned zero.
 
 ## 4. Install the platform with the IE10 and dictionary fixes
 
-Extract your full vendor ZIP into the state directory. Set `MEDIA_1` to the extracted directory containing `setup.exe`, `setup_noUAC.exe` and `media.db`:
+Extract your full vendor ZIP into the state directory. Point `MEDIA_1` at the folder with `setup.exe`, `setup_noUAC.exe` and `media.db`:
 
 ```bash
 export MEDIA_1="$SOLIDWORKS_PROTON_STATE/media/SOLIDWORKS_3DEXP_Desktop.Full.Windows64/1"
@@ -112,11 +112,11 @@ python3 patch_offline_installer.py "$MEDIA_1/setup.exe"
 ./launch_proton.sh "$MEDIA_1/setup_admin_proton_offline.exe"
 ```
 
-The patch verifies the whole source hash and changes only the IE10 export-presence branch in a separately named copy. It skips a false prerequisite check for missing `HttpWebSocketReceive`; it does not implement WebSockets. The original media stays unchanged, and the changed copy's original signature is invalid.
+The patch checks the whole file's hash, then changes only the IE10 export check, in a separately named copy. All it does is skip a false prerequisite check for the missing `HttpWebSocketReceive`. It doesn't implement WebSockets. The original media isn't touched, and the patched copy's signature is no longer valid.
 
-Use the normal administrator entry point. The `setup_noUAC.exe` path hit a vendor elevation error.
+Use the normal administrator entry point. `setup_noUAC.exe` ran into a vendor elevation error.
 
-**The actual laptop selection was W4Y — 3DEXPERIENCE SOLIDWORKS Ultimate**, default installation directory, updates on demand. The same prefix later launched **Professional for Makers** with the account's license. We did not reinstall Professional. `XWB` is the separate Professional choice shown in the installer records, but that fresh route is untested. For an exact replay, record the W4Y selection; do not treat it as entitlement to a different license tier.
+**On the laptop I actually selected W4Y (3DEXPERIENCE SOLIDWORKS Ultimate)**, default install directory, updates on demand. The same prefix later launched **Professional for Makers** with my account's license, and I didn't reinstall as Professional. `XWB` is the separate Professional option in the installer records, but I haven't tested that route on a fresh install. If you want an exact replay, pick W4Y. That isn't an entitlement to a different license tier.
 
 Default platform location:
 
@@ -124,43 +124,43 @@ Default platform location:
 export PLATFORM_BIN="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/Program Files/Dassault Systemes/SOLIDWORKS 3DEXPERIENCE R2026x/win_b64/code/bin"
 ```
 
-The first install failed at Object Modeler dictionary compilation because the installed `CATSysTS.dll` looked up an absent `RtlIsNameInExpression`. Apply our real matcher after that first interrupted installation:
+The first install failed at Object Modeler dictionary compilation, because the installed `CATSysTS.dll` looks up an `RtlIsNameInExpression` that isn't there. After that first install stops, apply my matcher:
 
 ```bash
 python3 -B test_directory_compat.py "$PLATFORM_BIN/CATSysTS.dll"
 python3 -B apply_directory_compat.py "$PLATFORM_BIN/CATSysTS.dll"
 ```
 
-This uses our checked-in `swcompat.dll`, preserves `CATSysTS.dll.pre-swcompat`, and rewrites only the KERNEL32 import provider. The proxy forwards existing imports and supplies actual length-delimited Unicode/DOS wildcard matching when the real NTDLL export is absent.
+This uses the checked-in `swcompat.dll`, saves `CATSysTS.dll.pre-swcompat`, and rewrites only the KERNEL32 import provider. The proxy forwards everything that already exists and adds real length-delimited Unicode/DOS wildcard matching when NTDLL doesn't have it.
 
-The vendor's **Restart installation** recopies the original DLL. Before choosing Restart, run this in a second terminal with the same environment:
+The installer's **Restart installation** copies the original DLL back. Before you hit Restart, run this in a second terminal with the same environment:
 
 ```bash
 python3 -B apply_directory_compat.py "$PLATFORM_BIN/CATSysTS.dll" --watch-for-recopy
 ```
 
-The watcher waits up to 15 minutes for the exact supported original bytes, then reapplies the change. On the laptop, the dictionary compiler returned zero, generated a 190,218-byte dictionary, and the platform installer completed successfully. This platform installation includes the connector and Installation Manager; CAD is installed separately in step 5.
+The watcher waits up to 15 minutes for the exact original bytes to reappear, then patches them again. On the laptop, the dictionary compiler then returned zero, wrote a 190,218-byte dictionary, and the platform install finished. This step installs the platform, connector and Installation Manager. CAD comes separately in step 5.
 
-To rebuild our proxy instead of using the checked-in one:
+If you'd rather rebuild the proxy than use the checked-in one:
 
 ```bash
 python3 -B build_directory_compat.py "$PLATFORM_BIN/CATSysTS.dll.pre-swcompat" "$SOLIDWORKS_PROTON_STATE/directory-compat-build"
 ```
 
-Use `--shim <build-directory>/swcompat.dll` with the apply script. The build output directory must not already exist. All guarded patches refuse unsupported builds; keep the hash check.
+Then pass `--shim <build-directory>/swcompat.dll` to the apply script. The build output directory must not exist yet. Every guarded patch refuses builds it doesn't know. Keep the hash check.
 
 ## 5. Install the actual SOLIDWORKS Design CAD payload
 
-Use the vendor Installation Manager to download **SOLIDWORKS Design 2026 SP3.0** and its prerequisites. Keep its complete `PreReqs`, `Toolbox` and `swwi` download directories. The manager downloaded and ran prerequisites before the CAD MSI's ZIP action failed on the laptop.
+Use the vendor Installation Manager to download **SOLIDWORKS Design 2026 SP3.0** and its prerequisites. Keep its full `PreReqs`, `Toolbox` and `swwi` download folders. On the laptop, the manager downloaded and ran the prerequisites, then the CAD MSI's ZIP step failed.
 
-The tested manager cache and CAD installation paths use the default Proton `steamuser` profile:
+The manager cache and CAD install paths I tested use Proton's default `steamuser` profile:
 
 ```bash
 export CAD_DATA="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/users/steamuser/Downloads/3DEXPERIENCE SOLIDWORKS Downloads/2026 SP3.0/swwi/data"
 export CAD_DIR="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/Program Files/Dassault Systemes/SOLIDWORKS Apps 2026/SOLIDWORKS"
 ```
 
-`InstallSpatialIOP` failed because the Windows ZIP-shell API returned `0x8000ffff`. We extracted the real `spatialiop.zip`, checked every entry's CRC and size, and changed only that extraction action's condition in a separate MSI copy:
+`InstallSpatialIOP` failed because the Windows ZIP-shell API returned `0x8000ffff`. So I extracted the real `spatialiop.zip` myself, checked every entry's CRC and size, and turned off only that extraction step in a separate copy of the MSI:
 
 ```bash
 python3 -B test_prepare_design_install.py
@@ -173,9 +173,9 @@ lld-link /entry:entry /subsystem:console /nodefaultlib /machine:x64 \
 ./launch_proton.sh "$SOLIDWORKS_PROTON_STATE/cad-msi.exe"
 ```
 
-The C helper is the exact pinned installation experiment, with the Windows cache and installation paths above hard-coded. It validates the custom action's target, sets `InstallSpatialIOP`'s condition to `0`, and invokes `MsiInstallProductW`. Its tested properties include `ADDLOCAL=ALL`, `OFFICEOPTION=3`, `SWXIM=1`, `SLDIM=1`, the default Toolbox folder, and reboot suppression. Do not use it with another release or before real ZIP extraction.
+The C helper is the exact install I ran, with the Windows cache and install paths above hard-coded. It checks the custom action's target, sets `InstallSpatialIOP`'s condition to `0`, and calls `MsiInstallProductW`. The properties I tested include `ADDLOCAL=ALL`, `OFFICEOPTION=3`, `SWXIM=1`, `SLDIM=1`, the default Toolbox folder, and no reboot. Don't use it with another release, or before the real ZIP is extracted.
 
-The payload had 11,547 ZIP entries and 2,048,172,990 expanded bytes. An earlier manager-derived optional-feature list returned success without installing the CAD core. `ADDLOCAL=ALL` installed the actual `sldworks.exe`. The successful MSI log is `C:sw-design-preextracted.log`. A UMU supervisor can remain alive because vendor services remain running; check the MSI's result and the actual executable, not just that supervisor.
+The payload had 11,547 ZIP entries and 2,048,172,990 bytes unpacked. An earlier optional-feature list taken from the manager returned success without installing the CAD core. `ADDLOCAL=ALL` installed the real `sldworks.exe`. The log from the run that worked is `C:\sw-design-preextracted.log`. A UMU supervisor can stay alive afterwards because vendor services keep running. Check the MSI's result and the executable itself, not whether that supervisor exited.
 
 ```bash
 ls "$CAD_DIR/sldworks.exe"
@@ -183,24 +183,24 @@ ls "$CAD_DIR/sldworks.exe"
 
 ## 6. Install and configure WebView2
 
-Download Microsoft's x64 Evergreen standalone installer from its [official distribution link](https://go.microsoft.com/fwlink/p/?LinkId=2124701). On the laptop the installer hash was `ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69` and it installed runtime `154.0.4258.62`. The Evergreen link changes; a new runtime is a version difference to record, not a matching reproduction.
+Download Microsoft's x64 Evergreen standalone installer from its [official link](https://go.microsoft.com/fwlink/p/?LinkId=2124701). On the laptop the installer's hash was `ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69` and it installed runtime `154.0.4258.62`. The Evergreen link changes over time, so a newer runtime is a difference worth writing down, not an exact match.
 
 ```bash
 ./launch_proton.sh "$SOLIDWORKS_PROTON_STATE/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install
 ```
 
-Verify the real `msedgewebview2.exe` exists under `drive_c/Program Files (x86)/Microsoft/EdgeWebView/Application/<version>/` and the EdgeUpdate registration reports `pv` and `LastInstallerError=0`. The vendor loader DLL alone is insufficient.
+Check that the real `msedgewebview2.exe` exists under `drive_c/Program Files (x86)/Microsoft/EdgeWebView/Application/<version>/` and that the EdgeUpdate registration shows `pv` and `LastInstallerError=0`. The vendor's loader DLL on its own isn't enough.
 
-Keep Proton's existing `msedgewebview2.exe` `Version=win7` override. We tried `win11`, which did not fix the startup failures, then restored `win7`. This records observed compatibility behavior, not Microsoft's support for WebView2 on Windows 7.
+Keep Proton's existing `msedgewebview2.exe` `Version=win7` override. I tried `win11`, it didn't fix the startup failures, and I put `win7` back. That's just what worked here. It's not Microsoft saying WebView2 supports Windows 7.
 
-Use Wine's builtin D3D libraries for this embedded runtime only:
+Use Wine's builtin D3D libraries for the embedded runtime only:
 
 ```bash
 pwine reg.exe add 'HKCU\Software\Wine\AppDefaults\msedgewebview2.exe\DllOverrides' /v dxgi /t REG_SZ /d builtin /f
 pwine reg.exe add 'HKCU\Software\Wine\AppDefaults\msedgewebview2.exe\DllOverrides' /v d3d11 /t REG_SZ /d builtin /f
 ```
 
-The login renderer worked with these **HKLM** policies for the two vendor executables. Elevated WebView startup ignored environment/HKCU arguments during our investigation:
+The login page rendered once I set these **HKLM** policies for the two vendor executables. Elevated WebView startup ignored environment and HKCU arguments when I tried them:
 
 ```bash
 export WEBVIEW_FLAGS='--enable-logging --v=1 --log-file=C:\webview-blank.log --use-gl=angle --use-angle=swiftshader'
@@ -208,32 +208,32 @@ pwine reg.exe add 'HKLM\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrow
 pwine reg.exe add 'HKLM\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments' /v SWXDesktopLauncher.exe /t REG_SZ /d "$WEBVIEW_FLAGS" /f
 ```
 
-The log can contain authentication URLs and tickets. Keep it local. No `--no-sandbox` or web-security bypass was used. SwiftShader rendered the embedded login; it is separate from CAD's OpenGL graphics setting.
+That log can contain sign-in URLs and tickets, so keep it local. I didn't use `--no-sandbox` or any web-security bypass. SwiftShader only renders the embedded login. It has nothing to do with CAD's OpenGL setting.
 
 ## 7. Use a Windows-identifying Firefox profile for login
 
-Set your own HTTPS 3ds.com platform URL. The repository does not include the laptop's tenant or dashboard identifiers:
+Set your own HTTPS 3ds.com platform URL. The repo doesn't include my tenant or dashboard IDs:
 
 ```bash
 export SOLIDWORKS_PLATFORM_URL='https://YOUR-PLATFORM-HOST.3dexperience.3ds.com/'
 python3 -B launch_windows_browser.py
 ```
 
-The helper configures a dedicated `browser-windows-firefox` profile, checks its actual HTTP User-Agent and JavaScript navigator fields against a local page, then opens the platform. Sign in yourself. Its process stays running until Firefox closes. Close this dedicated browser before rerunning the profile setup; leave unrelated Firefox profiles alone.
+The helper sets up a dedicated `browser-windows-firefox` profile, checks its real HTTP User-Agent and JavaScript navigator fields against a local page, then opens the platform. Sign in yourself. The helper stays running until Firefox closes. Close this browser before rerunning the profile setup, and leave your other Firefox profiles alone.
 
-The Windows user-agent alone was insufficient during earlier attempts. We used Firefox's native user-agent, platform (`Win32`), OS and app-version overrides together. SOLIDWORKS Design then appeared in the browser.
+The Windows user-agent alone wasn't enough in my earlier attempts. I needed Firefox's user-agent, platform (`Win32`), OS and app-version overrides all together. After that, SOLIDWORKS Design showed up in the browser.
 
-Route only this Wine prefix's external login links to the dedicated profile:
+Send only this Wine prefix's login links to the dedicated profile:
 
 ```bash
 pwine reg.exe add 'HKCU\Software\Wine\WineBrowser' /v Browsers /t REG_SZ /d "$SM4L_ROOT/open_windows_firefox.sh" /f
 ```
 
-The handler calls UMU's `steam-runtime-launch-client --host --` to open Firefox outside the container. It is for browser links originating inside UMU; it is not a general host browser launcher. Keep the checkout at the registered path, or update this registry value when moving it. Normal Linux browser defaults are unchanged.
+The handler uses UMU's `steam-runtime-launch-client --host --` to open Firefox outside the container. It's only for links coming from inside UMU, not a general way to launch a host browser. Keep the checkout at the registered path, or update this registry value if you move it. Your normal Linux browser defaults don't change.
 
-## 8. Check the vendor launcher and normal authentication
+## 8. Check the vendor launcher and normal sign-in
 
-The website detects the installed Windows `3DEXPERIENCELauncher` service. A connected browser alone is not enough. With the desktop environment present:
+The website looks for the installed Windows `3DEXPERIENCELauncher` service. A connected browser isn't enough on its own. With the desktop environment available:
 
 ```bash
 pwine sc.exe query 3DEXPERIENCELauncher
@@ -241,7 +241,7 @@ pwine sc.exe start 3DEXPERIENCELauncher
 curl --head --max-time 5 http://127.0.0.1:20250/
 ```
 
-On the working laptop the HTTP check returned 200. An already-running service may reject another start; query and check the endpoint instead of assuming failure. We stopped and restarted this service once when its listener accepted TCP but did not return HTTP.
+On the laptop the HTTP check returned 200. If the service is already running, another start can be rejected, so query it and check the endpoint before assuming it failed. I had to stop and restart it once when it accepted TCP but never answered HTTP.
 
 If the website stalls, start the real tray interactively:
 
@@ -250,15 +250,15 @@ export LAUNCHER_DIR="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/Program Files/D
 ./launch_proton.sh "$LAUNCHER_DIR/3DEXPERIENCELauncherSysTray.exe"
 ```
 
-Then click **Open once** and look for the vendor's normal trusted-platform confirmation. During the laptop investigation, a service-created backbone was headless; we started its real `3DEXPERIENCELauncherBackbone.exe` interactively with the **current service's original named-pipe arguments**. Old pipe arguments failed after a service restart. See [the handoff record](FINDINGS.md#browser-to-launcher-handoff) before attempting that recovery. This manual recovery is not yet a portable automatic step.
+Then click **Open once** and watch for the vendor's normal trusted-platform prompt. On the laptop, the backbone the service created was headless, so I started the real `3DEXPERIENCELauncherBackbone.exe` interactively with **the current service's original named-pipe arguments**. Old pipe arguments stopped working after a service restart. Read [the handoff notes](FINDINGS.md#browser-to-launcher-handoff) before trying that. It's a manual recovery, not an automatic step yet.
 
-We also replayed a fresh authenticated SWXDesktopLauncher request interactively without changing its arguments. Never commit, log, or reuse those URLs/tickets on the desktop. Once login worked, the final CAD launches used `sldworks.exe` directly.
+I also replayed a fresh signed-in SWXDesktopLauncher request interactively without changing its arguments. Never commit, log or reuse those URLs or tickets on another machine. Once sign-in worked, I launched `sldworks.exe` directly from then on.
 
-We saw server-access errors, HTTP 403 and license error 1002 before the successful run. Their exact resolution is not established. Do not infer that a purchased role is assigned, or patch a license result. Check the normal account, tenant and assigned role if those errors recur.
+Before the run that worked, I hit server-access errors, HTTP 403 and license error 1002. I don't know exactly what resolved them. Don't assume a purchased role is assigned, and don't patch a license result. If those errors come back, check your account, tenant and assigned role.
 
 ## 9. Apply the CAD header-control crash fix
 
-Before opening CAD, patch the prefix's amd64 Wine Common Controls copy:
+Before opening CAD, patch the prefix's amd64 copy of Wine's Common Controls:
 
 ```bash
 export HEADER_DLL="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/winsxs/amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.2600.2982_none_deadbeef/comctl32.dll"
@@ -267,9 +267,9 @@ python3 patch_header_layout.py "$HEADER_DLL"
 pwine reg.exe add 'HKCU\Software\Wine\AppDefaults\sldworks.exe\DllOverrides' /v comctl32 /t REG_SZ /d native,builtin /f
 ```
 
-The supported Wine DLL hash is `d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676`. The patch preserves `comctl32.before-header-guard.dll` beside it. It guards a null `HDM_LAYOUT` pointer and returns FALSE; valid layouts still execute the original code. The local Wine builtin marker is changed so Wine can load this copy instead of redirecting to the shared Proton DLL. The override is limited to `sldworks.exe`; shared Proton files are unchanged.
+The supported Wine DLL hash is `d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676`. The patch saves `comctl32.before-header-guard.dll` next to it. It catches a null `HDM_LAYOUT` pointer and returns FALSE, and valid layouts still run the original code. It also changes the local Wine builtin marker so Wine loads this copy instead of redirecting to Proton's shared DLL. The override only applies to `sldworks.exe`, and Proton's shared files stay untouched.
 
-A prefix refresh can recopy the original. If startup crashes again, compare the current DLL with the backup and rerun the guard only on the matching original. Running the patch on an already-patched file is intentionally refused.
+A prefix refresh can copy the original back. If startup crashes again, compare the current DLL with the backup and only rerun the guard on the matching original. Running it on an already-patched file is refused on purpose.
 
 ## 10. Launch CAD and fix the black viewport
 
@@ -277,36 +277,51 @@ A prefix refresh can recopy the original. If startup crashes again, compare the 
 ./launch_proton.sh "$CAD_DIR/sldworks.exe"
 ```
 
-The running laptop window identified itself as **SOLIDWORKS Design Professional for Makers 2026 SP3.0 — For Personal Use Only**. Its menus and feature tree rendered, but the part viewport and some content panes were black.
+The laptop window identified itself as **SOLIDWORKS Design Professional for Makers 2026 SP3.0 — For Personal Use Only**. Menus and the feature tree drew fine, but the part viewport and some content panes were black.
 
-In **Tools → Options → System Options → Performance**, clear **Enhanced graphics performance (requires SOLIDWORKS restart)**, apply, close CAD normally, and restart with the command above. The exact persisted laptop setting was:
+Go to **Tools → Options → System Options → Performance**, clear **Enhanced graphics performance (requires SOLIDWORKS restart)**, apply, close CAD normally, and start it again with the command above. The setting it saved on the laptop was:
 
 ```text
 HKCU\Software\SolidWorks\SOLIDWORKS 2026\Performance
 Use Performance Pipeline 2020 = DWORD 0
 ```
 
-We changed this through the GUI. **Use software OpenGL was not enabled**; it was greyed out before the change. After restart, Anthony created a cube and chamfered it. The [vendor graphics guide](https://help.solidworks.com/2026/english/SolidWorks/sldworks/c_Performance_Settings_with_OpenGL.htm?format=P) describes the enhanced-graphics/software-OpenGL troubleshooting sequence.
+I changed it in the GUI. **I didn't turn on software OpenGL**. It was greyed out before the change. After the restart I created a cube and chamfered it. The [vendor graphics guide](https://help.solidworks.com/2026/english/SolidWorks/sldworks/c_Performance_Settings_with_OpenGL.htm?format=P) walks through the same enhanced-graphics and software-OpenGL troubleshooting.
 
-## 11. Verify the desktop, then retain its checkpoint
+## 11. Install the start menu item
 
-Confirm the actual live edition, visible sketch planes, sketch creation, extrusion, chamfer, model rotation, and normal application exit. Save a test `.SLDPRT`, close CAD, reopen it, and verify its features. Record the GPU, package versions and any differences from `checkpoint.json`.
+From the cloned checkout:
 
-The laptop cube/chamfer is confirmed; save/reopen and SpaceMouse are pending. Browser elements still flash. Handle that separately from the working CAD graphics path. Do not call the desktop replication successful based on a splash screen or a running process alone.
+```bash
+chmod +x launch_solidworks.sh
+python3 -B install_desktop.py
+desktop-file-validate "$HOME/.local/share/applications/SM4L-solidworks.desktop"
+```
+
+Search your app menu for **SOLIDWORKS for Makers**. The launcher uses this checkout's Proton wrapper, the installed CAD path and the working startup settings. It also starts the optional [SpaceMouse bridge](SPACEMOUSE.md). On the laptop I validated the entry, refreshed KDE's menu cache with `kbuildsycoca6 --noincremental`, and launched CAD from it.
+
+The entry points at the checkout's absolute path, so rerun the installer if you move the checkout. It uses `$XDG_DATA_HOME/applications` when `XDG_DATA_HOME` is set, so adjust the validation path to match. It's a user menu entry and doesn't need root.
+
+## 12. Verify the new machine and record its checkpoint
+
+Confirm which edition is actually running, that sketch planes show up, and that you can sketch, extrude, chamfer, rotate the model and exit normally. Save a test `.SLDPRT`, close CAD, reopen it, and check its features. Write down the GPU, package versions and anything that differs from `checkpoint.json`.
+
+On the laptop, the cube/chamfer and SpaceMouse navigation work. Save/reopen hasn't been tested yet. Embedded browser panels still flash, and that should be handled separately from the working CAD graphics setup. A splash screen or a running process doesn't count as a successful replication.
 
 ## Checks and rollback
 
-These checks use temporary files and mock executables, without launching CAD:
+These run against temp files and mock executables, without launching CAD:
 
 ```bash
 python3 -B test_launch_proton.py
+python3 -B test_spacemouse.py
 python3 -B test_windows_browser.py
 python3 -B test_open_windows_firefox.py
 python3 -B test_prepare_design_install.py
 python3 -B test_directory_compat.py
 ```
 
-The source-dependent checks require your matching original files:
+These need your matching original files:
 
 ```bash
 python3 -B test_patch_offline_installer.py "$MEDIA_1"
@@ -314,15 +329,15 @@ python3 -B test_directory_compat.py "$PLATFORM_BIN/CATSysTS.dll.pre-swcompat"
 python3 -B test_patch_header_layout.py "$HEADER_DLL"
 ```
 
-Use the header backup as the test input after patching. The directory check expects the checked-in own proxy in the current directory.
+After patching, use the header backup as the test input. The directory check expects the checked-in proxy in the current directory.
 
-`header_layout_probe.c`, `event_signal_probe.c` and `child_memory_probe.c` preserve the actual native API reproductions. Compile each with clang's Windows x64 target, then link `/entry:entry /subsystem:console /nodefaultlib /machine:x64` against the import libraries it needs. Header uses kernel32/user32/comctl32 plus a Common Controls v6 manifest dependency; event and child-memory use kernel32. The header's exact link option is:
+`header_layout_probe.c`, `event_signal_probe.c` and `child_memory_probe.c` are the native API reproductions. Compile each with clang's Windows x64 target, then link with `/entry:entry /subsystem:console /nodefaultlib /machine:x64` against the import libraries it needs. The header probe needs kernel32, user32 and comctl32 plus a Common Controls v6 manifest dependency. The event and child-memory probes only need kernel32. The header probe's exact link options are:
 
 ```text
 /manifestdependency:type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="amd64" publicKeyToken="6595b64144ccf1df" language="*"
 /manifest:embed
 ```
 
-Rollback changes only this prefix. Close CAD normally first. Restore `CATSysTS.dll.pre-swcompat` and `comctl32.before-header-guard.dll` to their original names as needed. Remove the `sldworks.exe/comctl32` and WebView `dxgi`/`d3d11` override values, the two scoped HKLM WebView arguments, and the WineBrowser `Browsers` value to undo those settings. Original installer media and source MSI remain unchanged. Re-enable Enhanced graphics performance through the GUI only when deliberately testing that path again.
+Rolling back only touches this prefix. Close CAD normally first. Rename `CATSysTS.dll.pre-swcompat` and `comctl32.before-header-guard.dll` back to their original names as needed. To undo the settings, remove the `sldworks.exe/comctl32` and WebView `dxgi`/`d3d11` override values, the two HKLM WebView arguments, and the WineBrowser `Browsers` value. The original installer media and source MSI are never changed. Only turn Enhanced graphics performance back on in the GUI when you're deliberately testing that path again.
 
-Keep runtime logs and dumps local. They may contain credentials or launch URLs. This repository deliberately does not contain the laptop's installed prefix or authenticated Firefox profile.
+Keep runtime logs and dumps local, since they can contain credentials or launch URLs. This repo intentionally doesn't include the laptop's installed prefix or the signed-in Firefox profile.
