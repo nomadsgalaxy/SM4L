@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as tmp:
     proton = root / 'proton'
     server = proton / 'files/bin/wineserver'
     server.parent.mkdir(parents=True)
-    server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:]}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
+    server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:],"launch_lock_inherited":Path("/proc/self/fd/9").exists()}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
     server.chmod(0o755)
     env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0", SM4L_UI_COMPAT="0")
     env.pop('PROTON_NO_FSYNC', None)
@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as tmp:
     import json
     got = json.loads(capture.read_text())
     assert got == {'args': [str(exe), 'argument with spaces'], 'cwd': str(root), 'prefix': str(root / 'state/prefix'), 'proton': str(proton), 'nofsync': '1', 'noesync': '1'}
-    assert json.loads(Path(str(capture)+'.server').read_text()) == {'prefix': str(root / 'state/prefix/pfx'), 'fsync': '0', 'esync': '0', 'args': ['-p']}
+    assert json.loads(Path(str(capture)+'.server').read_text()) == {'prefix': str(root / 'state/prefix/pfx'), 'fsync': '0', 'esync': '0', 'args': ['-p'], 'launch_lock_inherited': False}
     assert len(list((root / 'state/logs').glob('run-*'))) == 1
     env.update(PROTON_NO_FSYNC='0', PROTON_NO_ESYNC='0')
     subprocess.run([launcher, exe], env=env, check=True)
