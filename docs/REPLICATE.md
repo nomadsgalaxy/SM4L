@@ -243,6 +243,17 @@ curl --head --max-time 5 http://127.0.0.1:20250/
 
 On the laptop the HTTP check returned 200. If the service is already running, another start can be rejected, so query it and check the endpoint before assuming it failed. I had to stop and restart it once when it accepted TCP but never answered HTTP.
 
+Next, mark the launcher service as interactive. This is the fix that finally made platform launches show up on screen:
+
+```bash
+pwine reg.exe add 'HKLM\System\CurrentControlSet\Services\3DEXPERIENCELauncher' /v Type /t REG_DWORD /d 0x110 /f
+WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
+```
+
+Wine starts every service on a hidden desktop (`__wineservice_winstation\Default`) unless the service has the `SERVICE_INTERACTIVE_PROCESS` flag (`0x100`). The vendor service is `0x10`, so the launcher backbone it creates, and every CAD copy that backbone starts, ran with no display at all. CAD got its license and kept running, but you'd never see a window. `0x110` keeps the original own-process type and adds the interactive flag. Close CAD before stopping the prefix, because the flag only applies when the service starts again.
+
+Before I found this, I was swapping the service's headless backbone for an interactive copy with the same named-pipe arguments by hand. That doesn't hold up. The service starts a new backbone for every request, so the swap had to happen on every launch. [The handoff notes](FINDINGS.md#browser-to-launcher-handoff) describe that old recovery.
+
 If the website stalls, start the real tray interactively:
 
 ```bash
@@ -250,9 +261,9 @@ export LAUNCHER_DIR="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/Program Files/D
 ./launch_proton.sh "$LAUNCHER_DIR/3DEXPERIENCELauncherSysTray.exe"
 ```
 
-Then click **Open once** and watch for the vendor's normal trusted-platform prompt. On the laptop, the backbone the service created was headless, so I started the real `3DEXPERIENCELauncherBackbone.exe` interactively with **the current service's original named-pipe arguments**. Old pipe arguments stopped working after a service restart. Read [the handoff notes](FINDINGS.md#browser-to-launcher-handoff) before trying that. It's a manual recovery, not an automatic step yet.
+Then click **Open once** and watch for the vendor's normal trusted-platform prompt.
 
-I also replayed a fresh signed-in SWXDesktopLauncher request interactively without changing its arguments. Never commit, log or reuse those URLs or tickets on another machine. Once sign-in worked, I launched `sldworks.exe` directly from then on.
+I also replayed a fresh signed-in SWXDesktopLauncher request interactively without changing its arguments. Never commit, log or reuse those URLs or tickets on another machine. Starting `sldworks.exe` directly doesn't skip the platform. CAD hands off to `SWXDesktopLauncher`, asks you to open 3DEXPERIENCE in the browser and click **Open**, then the service starts CAD again. That second copy is the one you use, which is why the service has to be interactive.
 
 Before the run that worked, I hit server-access errors, HTTP 403 and license error 1002. I don't know exactly what resolved them. Don't assume a purchased role is assigned, and don't patch a license result. If those errors come back, check your account, tenant and assigned role.
 

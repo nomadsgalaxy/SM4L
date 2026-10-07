@@ -1,5 +1,15 @@
 # Launch and recovery struggles
 
+## 2026-10-07, 15:57: what was actually wrong
+
+After the crash, CAD didn't fail to start. It started without a display. Launched directly, CAD hands off to `SWXDesktopLauncher` and exits on purpose. It writes `Temp\SWExitApp\dlgData.txt` on the way out, and that's not a crash. The browser Open goes to the launcher service, and the service starts a backbone, which starts CAD again. That backbone and CAD loaded no `winex11`, so CAD got its license (`XWB`) and sat there invisible. The 14:50 copy that got stopped as "stalled" was one of these.
+
+Wine runs services on a hidden desktop unless they're flagged interactive. Before the crash, a backbone started by hand on the desktop was still alive, so launches worked. The crash killed it, and every backbone after that came from the service and was headless. Swapping in an interactive backbone doesn't stick, because the service makes a new one for every request.
+
+Setting the service `Type` to `0x110` (adding `SERVICE_INTERACTIVE_PROCESS`) and restarting the prefix fixed it. The next launch put the backbone and CAD on the visible desktop with the splash and main window. The replication guide's step 8 now includes it.
+
+Two more things from this round. A direct launch can briefly start two launcher chains, and with them two CAD copies, so keep watching for a second instance. Also, the lock in `launch_proton.sh` stays held while the first launch's UMU container is alive, and that refused a relaunch even though no CAD was running.
+
 ## 2026-10-07 — the relaunch struggles after the desktop crash
 
 The working part was saved before testing. Multiple later test launches were left running; that was a mistake. I reported RAM and swap exhaustion at 14:41:41, systemd-oomd killing KWin, and Xwayland using about 10 GB RAM plus 15 GB swap. Those allocation figures come from my crash report; the precise leak still needs profiling. Stopping the dedicated prefix cleared all CAD copies and restored about 20 GB available RAM.

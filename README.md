@@ -8,6 +8,10 @@ The biggest challenge was getting the license from the 3DEXPERIENCE portal to pa
 
 So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on my Arch Linux x86_64 laptop through UMU and Proton. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
 
+## Known Issues
+
+Before you dive into this, please note that this is still in "proof of concept" stage, I just got this working, and haven't tested it with anything more complex than a cube with some chamfers. There's a lot of broken UI that I'm working on fixing.
+
 ## Where to start
 
 1. [Download the installer from Linux](docs/DOWNLOAD.md). The 3DEXPERIENCE site hides the desktop app from Linux browsers, so this covers the Firefox setup that gets around that.

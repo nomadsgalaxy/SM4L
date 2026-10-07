@@ -13,12 +13,14 @@ state="${SOLIDWORKS_PROTON_STATE:-${XDG_DATA_HOME:-$HOME/.local/share}/solidwork
 case "$(basename -- "$exe")" in
   sldworks.exe|SWXDesktopLauncher.exe|ENOPLMCSAClient.exe)
     mkdir -p "$state"
-    exec 9>"$state/cad-launch.lock"
+    exec 9>"$state/cad-run.lock"
     flock -n 9 || { echo "A SOLIDWORKS launch is already in progress." >&2; exit 1; }
     if pgrep -x sldworks.exe >/dev/null; then
       echo "SOLIDWORKS is already running. Close it before launching again." >&2
       exit 1
     fi
+    # Vendor clients stay alive after authentication; only CAD owns the run lock.
+    [[ "$exe" == */sldworks.exe ]] || exec 9>&-
     ;;
 esac
 mkdir -p "$state/logs"

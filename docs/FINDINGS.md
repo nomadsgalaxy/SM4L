@@ -11,6 +11,7 @@ These are the experiments from October 6–7, 2026. The commands and final setti
 | Object Modeler dictionary compilation fails | CATSysTS looks up an NTDLL `RtlIsNameInExpression` that isn't there, and the compiler returns one | My proxy implements real Unicode/DOS wildcard matching. The compiler and the vendor install both return zero |
 | CAD MSI can't unzip Spatial InterOp | ZIP-shell `SHCreateItemFromParsingName` fails with `0x8000ffff` | Extract the real ZIP with CRC/size checks and turn off only that redundant action in a separate MSI copy |
 | MSI succeeds but there's no CAD core | The first optional-feature list left the core out | The direct MSI install uses `ADDLOCAL=ALL`, which installed the actual CAD executable |
+| Platform-launched CAD never shows a window | The service's backbone and the CAD it starts load no `winex11`. Wine runs non-interactive services on `__wineservice_winstation\\Default` | Set the `3DEXPERIENCELauncher` service `Type` to `0x110`. The backbone and CAD then load `winex11` and show the splash and main window |
 | Linux browser hides the desktop app | A Windows label or user-agent on its own didn't bring the app back | Dedicated Firefox profile with a Windows user-agent plus Win32/Windows navigator overrides, verified live |
 | CAD login opens the default Linux browser | WineBrowser sends links to the system browser | A prefix-only handler opens the dedicated Firefox profile on the host |
 | WebView2 prerequisite error | The vendor loader exists, but the runtime and its registration don't | Installed Microsoft's real x64 Evergreen standalone runtime |
@@ -24,6 +25,8 @@ These are the experiments from October 6–7, 2026. The commands and final setti
 During the investigation, the directory matcher passed 191 expectation cases pulled independently from ReactOS's API tests. The repo's own check also covers DOS wildcards, Unicode, custom uppercase tables, import preservation, backup preservation, and refusing unsupported builds.
 
 ## Browser-to-launcher handoff
+
+**Update, October 7:** the real fix for the headless backbone is the service type. Wine puts every service that isn't flagged `SERVICE_INTERACTIVE_PROCESS` on a hidden desktop, and children inherit it. Setting the service `Type` from `0x10` to `0x110` and restarting the prefix put the backbone and CAD on the visible desktop on the first try. The manual recovery below is kept as a record. You shouldn't need it anymore.
 
 The website's Install/Open buttons depend on a lot at once: the real Windows launcher service, the installed apps, sign-in, browser identity, and the trusted-platform confirmation. Seeing those buttons doesn't prove CAD is licensed or visible.
 

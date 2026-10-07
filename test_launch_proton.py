@@ -57,11 +57,18 @@ with tempfile.TemporaryDirectory() as tmp:
     assert blocked.returncode == 1 and 'already running' in blocked.stderr
     assert not server_capture.exists()
     env['FAKE_CAD_RUNNING'] = '1'
-    with (Path(env['SOLIDWORKS_PROTON_STATE'])/'cad-launch.lock').open('a') as lock:
+    with (Path(env['SOLIDWORKS_PROTON_STATE'])/'cad-run.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         blocked = subprocess.run([wrapper],env=env,capture_output=True,text=True)
         assert blocked.returncode == 1 and 'already in progress' in blocked.stderr
         assert not server_capture.exists()
+    vendor = root/'SWXDesktopLauncher.exe'
+    vendor.touch()
+    # A vendor client releases its gate before spawning long-lived children.
+    check_lock = root/'check-vendor-lock'
+    check_lock.write_text('#!/usr/bin/env python3\nimport fcntl,os\nfrom pathlib import Path\nwith (Path(os.environ["SOLIDWORKS_PROTON_STATE"])/"cad-run.lock").open("a") as f: fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\n')
+    check_lock.chmod(0o755)
+    subprocess.run([launcher,vendor],env=dict(env,UMU_RUN=str(check_lock)),check=True)
     subprocess.run([wrapper,'part with spaces.SLDPRT'],env=env,check=True)
     assert json.loads(capture.read_text())['args']==[str(cad),'part with spaces.SLDPRT']
     # Exercise automatic bridge startup without connecting to hardware.
