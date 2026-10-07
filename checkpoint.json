@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-07",
+  "status": "Modeling confirmed on one Arch Linux x86_64 laptop; desktop replication pending",
+  "edition": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
+  "platform_media": "SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip",
+  "umu": "1.4.4",
+  "umu_zipapp_sha256": "d0005a58602041229cc467dab03dc0c0b9e8cce09a8145b16b7683244cf17804",
+  "proton": "UMU-Proton-10.0-4",
+  "proton_version_file": "1774856027 UMU-Proton-10.0-4",
+  "runtime": "sniper 3.0.20260928.262393",
+  "packages": {
+    "firefox": "157.0-1.1",
+    "wine_import_libraries": "11.18-1.1",
+    "clang": "23.1.1-1.1",
+    "lld": "23.1.1-1.1",
+    "python": "3.14.7-2",
+    "mesa": "3:26.2.4-1",
+    "vulkan-intel": "3:26.2.4-1"
+  },
+  "renderer": "Mesa Intel(R) Graphics (MTL)",
+  "webview2": "154.0.4258.62",
+  "webview2_installer_sha256": "ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69",
+  "historical_full_media_product": "W4Y - 3DEXPERIENCE SOLIDWORKS Ultimate",
+  "actual_live_product": "Professional for Makers",
+  "uninstall_reinstall_performed": false,
+  "modeling_evidence": "Anthony reported creating a cube and chamfering it after disabling Enhanced graphics performance and restarting",
+  "header_probe": "Valid layout succeeded; null layout crashed before guard and returned FALSE after guard with native,builtin override",
+  "save_reopen_verified": false,
+  "space_mouse_verified": false,
+  "browser_flicker_remaining": true,
+  "fresh_prefix_replication_verified": false,
+  "required_source_hashes": {
+    "setup.exe": "c3aeeecdb030e124c74eb9a4897ff08c60122e2ed7bc2058b313c8c4cddb222a",
+    "CATSysTS.dll": "acfb5354bf75164f1e81def14e856aa50004bfb365dea165dcb93c1f6c7b8f35",
+    "solidworks.msi": "f0ab874d24fd70842764ef90ca0293406d6c322cd3329f230ce80d564a5b91c4",
+    "spatialiop.zip": "3a5584aa82d821a7426da919b02d309cea1afd7f9e540c3e23a9eab43358ccda",
+    "comctl32.dll": "d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676"
+  },
+  "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771"
+}
