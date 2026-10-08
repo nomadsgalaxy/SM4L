@@ -15,7 +15,7 @@ Before you dive into this, please note that this is still in "proof of concept" 
 Open issues:
 
 - **Section headers wipe away (fixed).** The PropertyManager headers (Type, To Fillet, Parameters, Options) used to disappear. The header hook in the UI add-in keeps them visible, verified live on 2026-10-08, including through drag, resize and with no flicker. The exact caller that drives the drift is still being traced.
-- **3MF export crashes (under investigation).** Save As 3MF crashed CAD. The log ends with Wine msxml parse errors and a `CoMarshalInterface` failure. It may need native msxml6.
+- **3MF export crashes (open, not fixed).** Save As 3MF crashes CAD. In a traced run, the main thread hits an access violation inside Wine's builtin msxml3.dll, called from the printing module that the 3MF export uses. A native msxml3 override for CAD was tried and failed live, so it is not a fix. The cause is still open.
 
 ## Where to start
 
