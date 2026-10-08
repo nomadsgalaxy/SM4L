@@ -8,34 +8,43 @@ The biggest challenge was getting the license from the 3DEXPERIENCE portal to pa
 
 So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on my Arch Linux x86_64 laptop through UMU and Proton. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
 
-## Known Issues
+## Status
 
-Before you dive into this, please note that this is still in "proof of concept" stage, I just got this working, and haven't tested it with anything more complex than a cube with some chamfers. There's a lot of broken UI that I'm working on fixing.
+This is early work on one machine: an Arch Linux x86_64 laptop with an Intel GPU. Nobody has replayed the guide on a fresh machine yet. Treat it as a working reference and check each step as you go.
 
-Open issues:
+**Verified on the reference machine**
 
-- **Section headers wipe away (fixed).** The PropertyManager headers (Type, To Fillet, Parameters, Options) used to disappear. The header hook in the UI add-in keeps them visible, verified live on 2026-10-08, including through drag, resize and with no flicker. The exact caller that drives the drift is still being traced.
-- **3MF Save As works with native msxml6 (one live run).** Without the fix, Save As 3MF crashes CAD inside Wine's builtin msxml3. Step 9c sets native msxml6 for CAD only. It was verified once on 2026-10-08, and the file imported into PrusaSlicer. Keep it on the list until it passes again on a retry.
+- Installing, signing in through the 3DEXPERIENCE platform, and launching CAD from the browser's Open button and from the menu entry.
+- Sketching, extruding, chamfering and rotating a model.
+- SpaceMouse navigation, with the view following the cap.
+- Checkbox and radio labels in the PropertyManager, once the theme is off ([step 9b](docs/REPLICATE.md#9b-use-classic-controls-so-the-checkbox-and-radio-labels-draw)).
+- PropertyManager section headers, including through drag and resize. The header hook is in the UI add-in.
+- Save As 3MF, verified once ([step 9c](docs/REPLICATE.md#9c-use-native-msxml6-for-cad-so-3mf-save-as-works)). The file imported into PrusaSlicer.
+
+**Pending confirmation**
+
+- The status-bar `SetWindowPos` dedupe is on by default. It was measured in an A/B run, but not yet after a restart in normal mode.
+- The leftover-process cleanup is enabled. It hasn't yet acted on a real CAD exit.
+- `ensure_theme_off.py` re-applies the theme setting before each start. It isn't confirmed in a real start yet.
+- Saving a `.SLDPRT` and reopening it.
+
+**Open**
+
+- Embedded browser panels still flash.
+- Model rebuilds are slow. In measured runs, most of the time goes to Wine window-system calls.
+- The exact caller behind the header drift, and the owner of a managed hook that the A/B found, aren't identified yet.
+- CAD has hung on exit once, with the cause unknown.
+- The 3MF fix is verified in one run, and the upstream Wine bug report hasn't been filed yet.
+- Native KDE file chooser integration isn't done.
+
+The working setup is described in [the replication guide](docs/REPLICATE.md). The versions and evidence behind it are in [checkpoint.json](checkpoint.json).
 
 ## Where to start
 
 1. [Download the installer from Linux](docs/DOWNLOAD.md). The 3DEXPERIENCE site hides the desktop app from Linux browsers, so this covers the Firefox setup that gets around that.
-2. [Follow the replication guide](docs/REPLICATE.md). It's the exact route I used, with the commands, source hashes, registry settings and rollback steps.
-3. [Read the findings](docs/FINDINGS.md) if you want to know why each fix exists. 
+2. [Follow the replication guide](docs/REPLICATE.md). It's the route that works on the reference machine, with the commands, source hashes, registry settings and rollback steps.
+3. [Read the findings](docs/FINDINGS.md) if you want to know why each fix exists.
 4. [Set up the SpaceMouse](docs/SPACEMOUSE.md) if you have one.
-
-[checkpoint.json](checkpoint.json) records the versions I tested and the evidence behind them.
-
-## Where it stands
-
-This is a working laptop setup with a written guide. It isn't an unattended installer, and nobody has replayed it on a fresh machine yet. That's the next test, on my desktop.
-
-- **Works:** installing, signing in, launching CAD, and modeling a chamfered cube.
-- **Works:** SpaceMouse camera movement is smooth and tilts the right way. [Install the menu launcher](docs/REPLICATE.md#11-install-the-start-menu-item) and it starts automatically.
-- **Not tested yet:** saving a part and reopening it.
-- **Still broken:** embedded browser panels flash.
-
-One thing to be upfront about: the installer record says I picked W4Y Ultimate, but the running CAD window says Professional for Makers. I didn't uninstall and reinstall in between the license error and the launch that worked. The mismatch was a guess I had at one point, not a known cause, and it's not a reason to mess with licensing.
 
 ## What you need to bring
 
@@ -55,6 +64,10 @@ I left out vendor payloads, installed prefixes, cookies, launch tickets and cras
 | `prepare_design_install.py`, `cad-msi-experiment.c` | Extracts Spatial InterOp properly and runs the exact CAD MSI install I used |
 | Firefox scripts | A separate Firefox profile that identifies as Windows, plus routing for login links from the prefix |
 | `patch_header_layout.py` | A version-pinned, prefix-only guard for the null `HDM_LAYOUT` crash |
+| `launch_service.sh`, `units/*.service` | Boots the launcher tray at login, and runs the SpaceMouse and UI-compat bridges as user units |
+| `cad_cleanup.py` | After CAD exits, closes this prefix's leftover launcher and helper processes, with launch-chain protection |
+| `install_msxml6.py` | Installs the native msxml6 override for CAD only, with hash checks and rollback |
+| `ensure_theme_off.py` | Keeps the prefix's theme setting off before each start (step 9b) |
 | `*_probe.c`, `test_*.py` | Reproductions and checks for each failure and patch |
 | `install_msxml6.py`, `test_install_msxml6.py` | Installs the native msxml6 override for CAD only (REPLICATE step 9c), with hash checks and rollback |
 
@@ -71,3 +84,9 @@ Tools and experiments (not yet verified):
 - The header-wipe fix in `spacemouse-view.c`: built and compile-checked, under test in CAD. This commit is a checkpoint, not a fix.
 
 Run the checks at the end of the replication guide before patching anything. Every patch checks the file's hash first. If one refuses, you've got a different build, so stop and look at it. Don't remove the guard.
+
+## License
+
+SM4L is free software under the [GNU General Public License v3.0](LICENSE). Copyright 2026 Anthony Dragone.
+
+The license covers the scripts, add-in source and documentation in this repository. It doesn't cover SOLIDWORKS, the 3DEXPERIENCE platform, Microsoft components, Proton, UMU or any other vendor software. You need your own licences and media for those.

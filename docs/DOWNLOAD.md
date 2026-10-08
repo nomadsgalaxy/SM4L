@@ -43,7 +43,7 @@ Before it sends you to the platform, a short-lived local page checks the request
 
 Sign in normally in the new window. It has its own cookies, separate from your usual Linux browser, so use it for the rest of the download. Your default browser and any existing Firefox profiles stay as they were.
 
-On my laptop, Firefox 157.0 passed the identity check and SOLIDWORKS Design showed up in the signed-in dashboard. If you're on a different Firefox version, the same check still has to pass. If the helper reports a mismatch, the override didn't take.
+On the reference machine, Firefox 157.0 passed the identity check and SOLIDWORKS Design showed up in the signed-in dashboard. If you're on a different Firefox version, the same check still has to pass. If the helper reports a mismatch, the override didn't take.
 
 ## 2. Get the full media
 

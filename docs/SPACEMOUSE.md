@@ -13,7 +13,7 @@ sudo pacman -S --needed spacenavd libspnav clang lld wine
 sudo systemctl enable --now spacenavd
 ```
 
-`spacenavd` owns the device, and my reader talks to its Unix socket, so your account doesn't need direct access to every input device. On my laptop the daemon's X11 connection failed, but the Unix socket worked fine, so I didn't bother fixing its X11 auth.
+`spacenavd` owns the device, and my reader talks to its Unix socket, so your account doesn't need direct access to every input device. On the reference machine the daemon's X11 connection failed, but the Unix socket worked fine, so I didn't bother fixing its X11 auth.
 
 From the SM4L checkout, with the same prefix and Proton environment as the replication guide:
 
@@ -46,7 +46,7 @@ Current defaults:
 | Smoothing | `0.05` second low-pass time constant |
 | Inverted axes | `rz`, for physical left/right cap tilt after the daemon's axis remapping |
 
-The reader combines the latest input into updates at up to 30 Hz. Smoothing stops the moment you let go of the cap. View calls run inside CAD, and COM method IDs are cached. Each update turns off view refresh, restores whatever it was before, then asks for one redraw. The timer runs on CAD's UI thread with a reentrancy guard. That's how update time went from 194 ms remotely, to 80–100 ms in-process with separate redraws, to 14–18 ms with one batched redraw. Those numbers come from my laptop's test geometry, not a big assembly. The add-in logs the average frame time every 30 updates to `C:\sm4l-spacemouse-addin.log`.
+The reader combines the latest input into updates at up to 30 Hz. Smoothing stops the moment you let go of the cap. View calls run inside CAD, and COM method IDs are cached. Each update turns off view refresh, restores whatever it was before, then asks for one redraw. The timer runs on CAD's UI thread with a reentrancy guard. That's how update time went from 194 ms remotely, to 80–100 ms in-process with separate redraws, to 14–18 ms with one batched redraw. Those numbers come from the reference machine's test geometry, not a big assembly. The add-in logs the average frame time every 30 updates to `C:\sm4l-spacemouse-addin.log`.
 
 To try different speeds manually:
 
