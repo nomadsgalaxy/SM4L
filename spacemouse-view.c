@@ -1395,9 +1395,8 @@ static void mods_refresh(void) {
 static U sampler_thread(P unused) {
   (void)unused;
   P file = CreateFileW(L"C:\\sm4l-sample.txt", 0x40000000, 3, 0, 2, 0x80, 0);
-  P process = GetCurrentProcess();
-  (void)process;
-  mods_refresh();
+  /* the module table was filled by sampler_poll on the UI thread: no loader-lock call from this thread */
+  say("sampler thread started\r\n");
   static unsigned char ctx[1232] __attribute__((aligned(16)));
   static Q stack[1024];
   Q start = GetTickCount64();
@@ -1451,6 +1450,8 @@ static U sampler_thread(P unused) {
     Sleep(2);
   }
   CloseHandle(file);
+  hexv("sampler finished, samples=", (Q)samples);
+  say("\r\n");
   sampler_state = 2;
   return (U)samples;
 }
@@ -1461,6 +1462,7 @@ static void sampler_poll(void) {
   if (sampler_state == 0 && on) {
     __asm__ volatile("movq %%gs:8, %0" : "=r"(samp_stack_base));
     samp_ui_thread = OpenThread(0x4a, 0, GetCurrentThreadId());
+    mods_refresh();
     sampler_handle = samp_ui_thread ? CreateThread(0, 0, sampler_thread, 0, 0, 0) : 0;
     if (sampler_handle) {
       sampler_state = 1;
@@ -1575,7 +1577,27 @@ static Q hook_GetTopWindow(P w) {
   return real_GetTopWindow(w);
 }
 static long long hook_SendMessageW(P w, U m, Q a, Q b) {
-  msg_note(m, (Q)__builtin_return_address(0));
+  Q ret = (Q)__builtin_return_address(0);
+  msg_note(m, ret);
+  /* WM_MDIGETACTIVE cache (opt-in, C:\\sm4l-mdicache-on): MFC asks the MDI client for the active child about 3,000 times
+   * per second, all from one call site in mfc140u. The answer (result and the BOOL lParam points to) is reused for at
+   * most 50 ms and only while no window was created, destroyed or activated and no MDI message passed through here. */
+  if (mdicache_on && mfc_base && ret >= mfc_base + 0x2b3300 && ret < mfc_base + 0x2b3400 && m == 0x229 && GetCurrentThreadId() == ui_tid) {
+    Q now = GetTickCount64();
+    MdiEntry *e = &mdi_table[((Q)w >> 2) & 15];
+    if (e->key == (Q)w && e->gen == walk_gen && now - e->stamp < 50) {
+      mdi_hit++;
+      if (b)
+        *(int *)b = (int)e->aux;
+      return (long long)e->val;
+    }
+    long long value = real_SendMessageW(w, m, a, b);
+    mdi_miss++;
+    e->key = (Q)w, e->val = (Q)value, e->gen = walk_gen, e->stamp = now, e->aux = b ? (Q)(U) * (int *)b : 0;
+    return value;
+  }
+  if (m >= 0x220 && m <= 0x22a && m != 0x229)
+    walk_gen++; /* an MDI message that changes the active child or the frame layout */
   return real_SendMessageW(w, m, a, b);
 }
 static long long hook_SendMessageA(P w, U m, Q a, Q b) {
@@ -1590,17 +1612,21 @@ static int hook_UpdateWindow(P w) {
  * per call (first 300 since the flag appeared): window class, handle, whether the call changes nothing (same size and
  * position as now, no z-order change), the window's current x,y,w,h (parent coordinates for child windows), the
  * requested x,y,cx,cy and the flags. Totals go on the cnt lines. */
-static Q swp_base, swp_total, swp_noop, swp_skipped;
+static Q swp_base, swp_total, swp_noop, swp_skipped, mfc_base, mdi_hit, mdi_miss;
+static int mdicache_on;
+typedef struct {
+  Q key, val, gen, stamp, aux;
+} MdiEntry;
+static MdiEntry mdi_table[16];
 static int swp_log_on, swp_logged, swp_dedupe_on;
+#include "swp_dedupe.h"
 static int swp_noop_call(P w, int x, int y, int cx, int cy, U flags, int *r) {
   r[0] = r[1] = r[2] = r[3] = 0;
   GetWindowRect(w, r);
   P parent = GetParent(w);
   if (parent && (GetWindowLongPtrW(w, -16) & 0x40000000))
     MapWindowPoints(0, parent, r, 2);
-  int same_size = (flags & 1) || (cx == r[2] - r[0] && cy == r[3] - r[1]);
-  int same_pos = (flags & 2) || (x == r[0] && y == r[1]);
-  return same_size && same_pos && (flags & 4);
+  return swp_rect_noop(x, y, cx, cy, flags, r);
 }
 static void swp_note(P w, int x, int y, int cx, int cy, U flags) {
   int r[4];
@@ -1637,17 +1663,13 @@ static int hook_SetWindowPos(P w, P after, int x, int y, int cx, int cy, U flags
   if ((swp_log_on || swp_dedupe_on) && swp_base) {
     Q ret = (Q)__builtin_return_address(0);
     if (ret >= swp_base + 0x74be00 && ret < swp_base + 0x74bf00) {
-      /* Dedupe (opt-in, C:\\sm4l-swp-dedupe-on): the status bar's progress bar is re-positioned to the rectangle it
-       * already has about 120 times per rebuild (all calls were no-ops in the log). Skip exactly that case: caller
-       * in this vendor routine, class msctls_progress32, only SWP_NOZORDER, rectangle unchanged. */
+      /* Dedupe (on by default; C:\\sm4l-swp-dedupe-off turns it off): the status bar's progress bar is re-positioned
+       * to the rectangle it already has about 120 times per rebuild (every logged call was a no-op). The rules are in
+       * swp_dedupe.h and are checked by test_swp_dedupe.py. */
       if (swp_dedupe_on && flags == 4) {
         W name[24];
-        static const char want[] = "msctls_progress32";
-        int n = GetClassNameW(w, name, 24), same = n == 17;
-        for (int i = 0; same && i < 17; i++)
-          same = name[i] == (W)want[i];
-        int r[4];
-        if (same && swp_noop_call(w, x, y, cx, cy, flags, r)) {
+        int n = GetClassNameW(w, name, 24), r[4];
+        if (swp_dedupe_skip(1, 1, flags, swp_class_is_progress((const unsigned short *)name, n), swp_noop_call(w, x, y, cx, cy, flags, r))) {
           swp_skipped++;
           return 1;
         }
@@ -1706,7 +1728,7 @@ static const struct {
     {"gdi32.dll", "SwapBuffers", hook_SwapBuffers, (void **)&real_SwapBuffers},
 };
 static P hooked_modules[400];
-static int n_hooked, n_patched;
+static int n_hooked, n_patched, hook_scope_all; /* scope: only SetWindowPos until an experiment flag asks for all */
 static Q *iat_slot[700], iat_original[700];
 static int n_iat;
 static int ci_equal(const char *a, const char *b) { /* b is lower case */
@@ -1756,6 +1778,8 @@ static void iat_patch(P module) {
           j++;
         if (fn[j] || hook_defs[k].fn[j] || !ci_equal(dll, hook_defs[k].dll) || *slot == (Q)hook_defs[k].repl)
           continue;
+        if (!hook_scope_all && hook_defs[k].repl != (void *)hook_SetWindowPos)
+          continue;
         U old;
         if (!*hook_defs[k].orig)
           *hook_defs[k].orig = (void *)*slot;
@@ -1773,7 +1797,7 @@ static void iat_patch(P module) {
 /* Put every patched import slot back (DisconnectFromSW): vendor code must not keep calling into this DLL once CAD
  * may unload it. The wrappers also stop doing anything. */
 static void iat_restore_all(void) {
-  walk_cache_on = swp_log_on = swp_dedupe_on = 0;
+  walk_cache_on = swp_log_on = swp_dedupe_on = mdicache_on = 0;
   for (int i = 0; i < n_iat; i++) {
     U old;
     if (VirtualProtect(iat_slot[i], 8, 4, &old)) {
@@ -1853,11 +1877,18 @@ static void counters_poll(void) {
   ui_tid = GetCurrentThreadId(); /* the tick runs on the UI thread */
   walk_cache_on = GetFileAttributesW(L"C:\\sm4l-walkcache-on") != 0xffffffffu;
   int swp_wanted = GetFileAttributesW(L"C:\\sm4l-swplog-on") != 0xffffffffu;
+  mdicache_on = GetFileAttributesW(L"C:\\sm4l-mdicache-on") != 0xffffffffu;
   if (swp_wanted && !swp_log_on)
     swp_logged = 0, swp_total = 0, swp_noop = 0;
   swp_log_on = swp_wanted;
-  swp_dedupe_on = GetFileAttributesW(L"C:\\sm4l-swp-dedupe-on") != 0xffffffffu;
-  if (!on && !walk_cache_on && !swp_log_on && !swp_dedupe_on) {
+  swp_dedupe_on = GetFileAttributesW(L"C:\\sm4l-swp-dedupe-off") == 0xffffffffu; /* default on */
+  if ((on || walk_cache_on || swp_log_on || mdicache_on) && !hook_scope_all) {
+    hook_scope_all = 1; /* an experiment wants the counting hooks too: rescan every module with the full set */
+    n_hooked = 0;
+    if (armed)
+      counters_hook_modules();
+  }
+  if (!on && !walk_cache_on && !swp_log_on && !swp_dedupe_on && !mdicache_on) {
     armed = 0;
     return;
   }
@@ -1869,8 +1900,10 @@ static void counters_poll(void) {
       const char *m = samp_mods[i].name;
       if (m[0] == 's' && m[1] == 'l' && m[2] == 'd' && m[3] == 'a' && m[4] == 'p' && m[5] == 'p' && m[6] == 'u' && !m[7])
         swp_base = samp_mods[i].base;
+      if (!__builtin_memcmp(m, "mfc140u", 8))
+        mfc_base = samp_mods[i].base;
     }
-    hexv("counters armed, hooks=", (Q)n_patched);
+    hexv(on || walk_cache_on || swp_log_on ? "counters armed, hooks=" : "swp dedupe armed, hooks=", (Q)n_patched);
     hexv("modules=", (Q)n_hooked);
     say("\r\n");
     last_gw = cnt_getwindow, last_top = cnt_gettop, last_msg = cnt_sendmsg, last_upd = cnt_updatewin;
@@ -1914,6 +1947,10 @@ static void counters_poll(void) {
   if (swp_log_on) {
     hexv("swp_total=", swp_total);
     hexv("swp_noop=", swp_noop);
+  }
+  if (mdicache_on) {
+    hexv("mdi_hit=", mdi_hit);
+    hexv("mdi_miss=", mdi_miss);
   }
   hexv("wc_hit=", wc_hit);
   hexv("wc_miss=", wc_miss);
