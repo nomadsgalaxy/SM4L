@@ -358,6 +358,8 @@ The expected SHA256 values, before you copy:
 - `syswow64` (x86): `msxml6.dll` `66fb552089d28797ed74afbff5ab2c739828cf9abb10579a6641d5bd51cdec7b`, `msxml6r.dll` `c4c3e734abbf54424f878457d93e4981f0ef19cfa974aeeacddfa916a508b185`
 
 
+The scripted path does the same copies, checks the hashes, and sets the override. With the prefix stopped, run `python3 -B install_msxml6.py` from the folder with the cached KB2957482 package. It needs `7z`. The manual steps below stay the reference.
+
 Then set the override for CAD only, and stop the prefix again:
 
 ```bash

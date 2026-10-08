@@ -56,6 +56,7 @@ I left out vendor payloads, installed prefixes, cookies, launch tickets and cras
 | Firefox scripts | A separate Firefox profile that identifies as Windows, plus routing for login links from the prefix |
 | `patch_header_layout.py` | A version-pinned, prefix-only guard for the null `HDM_LAYOUT` crash |
 | `*_probe.c`, `test_*.py` | Reproductions and checks for each failure and patch |
+| `install_msxml6.py`, `test_install_msxml6.py` | Installs the native msxml6 override for CAD only (REPLICATE step 9c), with hash checks and rollback |
 
 Tools and experiments (not yet verified):
 
