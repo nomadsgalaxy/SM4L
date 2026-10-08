@@ -1351,6 +1351,8 @@ static int samp_nmods;
 static P samp_ui_thread;
 static Q samp_stack_base; /* UI thread's TEB StackBase: the stack copy below never reads past it */
 static volatile int sampler_state; /* 0 idle, 1 running, 2 finished (waits for the flag to go) */
+static volatile int sampler_quit;  /* set by DisconnectFromSW: the sampler thread must end, never left holding a paused thread */
+static P sampler_handle;
 static int samp_fmt(char *o, Q a) {
   for (int i = 0; i < samp_nmods; i++)
     if (a >= samp_mods[i].base && a < samp_mods[i].base + samp_mods[i].size) {
@@ -1400,7 +1402,7 @@ static U sampler_thread(P unused) {
   static Q stack[1024];
   Q start = GetTickCount64();
   int samples = 0;
-  while (GetTickCount64() - start < 60000 && GetFileAttributesW(L"C:\\sm4l-sample-stop") == 0xffffffffu) {
+  while (!sampler_quit && GetTickCount64() - start < 60000 && GetFileAttributesW(L"C:\\sm4l-sample-stop") == 0xffffffffu) {
     Q got = 0;
     SuspendThread(samp_ui_thread);
     *(U *)(ctx + 0x30) = 0x100001;
@@ -1459,10 +1461,25 @@ static void sampler_poll(void) {
   if (sampler_state == 0 && on) {
     __asm__ volatile("movq %%gs:8, %0" : "=r"(samp_stack_base));
     samp_ui_thread = OpenThread(0x4a, 0, GetCurrentThreadId());
-    if (samp_ui_thread && CreateThread(0, 0, sampler_thread, 0, 0, 0)) {
+    sampler_handle = samp_ui_thread ? CreateThread(0, 0, sampler_thread, 0, 0, 0) : 0;
+    if (sampler_handle) {
       sampler_state = 1;
       say("sampler armed\r\n");
     }
+  }
+}
+/* Called from DisconnectFromSW (never from DllMain: this DLL has none): end the sampler thread and wait for it, so no
+ * thread of ours is left running or has the UI thread paused while CAD shuts down. */
+static void sampler_stop_join(void) {
+  sampler_quit = 1;
+  if (sampler_handle) {
+    WaitForSingleObject(sampler_handle, 3000);
+    CloseHandle(sampler_handle);
+    sampler_handle = 0;
+  }
+  if (samp_ui_thread) {
+    CloseHandle(samp_ui_thread);
+    samp_ui_thread = 0;
   }
 }
 /* Opt-in call counters (C:\sm4l-counters-on): log-only IAT hooks on user32's GetWindow, GetTopWindow, SendMessageW/A and
@@ -1569,9 +1586,76 @@ static int hook_UpdateWindow(P w) {
   cnt_updatewin++;
   return real_UpdateWindow(w);
 }
+/* SetWindowPos detail log (opt-in, C:\sm4l-swplog-on): for calls made from sldappu+0x74be00..0x74bf00, one "swp" line
+ * per call (first 300 since the flag appeared): window class, handle, whether the call changes nothing (same size and
+ * position as now, no z-order change), the window's current x,y,w,h (parent coordinates for child windows), the
+ * requested x,y,cx,cy and the flags. Totals go on the cnt lines. */
+static Q swp_base, swp_total, swp_noop, swp_skipped;
+static int swp_log_on, swp_logged, swp_dedupe_on;
+static int swp_noop_call(P w, int x, int y, int cx, int cy, U flags, int *r) {
+  r[0] = r[1] = r[2] = r[3] = 0;
+  GetWindowRect(w, r);
+  P parent = GetParent(w);
+  if (parent && (GetWindowLongPtrW(w, -16) & 0x40000000))
+    MapWindowPoints(0, parent, r, 2);
+  int same_size = (flags & 1) || (cx == r[2] - r[0] && cy == r[3] - r[1]);
+  int same_pos = (flags & 2) || (x == r[0] && y == r[1]);
+  return same_size && same_pos && (flags & 4);
+}
+static void swp_note(P w, int x, int y, int cx, int cy, U flags) {
+  int r[4];
+  int noop = swp_noop_call(w, x, y, cx, cy, flags, r);
+  swp_total++;
+  swp_noop += (Q)noop;
+  if (swp_logged >= 300)
+    return;
+  swp_logged++;
+  W name[32];
+  char text[32];
+  int n = GetClassNameW(w, name, 32);
+  for (int i = 0; i < n && i < 31; i++)
+    text[i] = (char)name[i];
+  text[n < 31 ? n : 31] = 0;
+  say("swp ");
+  say(text);
+  hexv(" hwnd=", (Q)w);
+  hexv("noop=", (Q)noop);
+  hexv("old_x=", (Q)(U)r[0]);
+  hexv("y=", (Q)(U)r[1]);
+  hexv("w=", (Q)(U)(r[2] - r[0]));
+  hexv("h=", (Q)(U)(r[3] - r[1]));
+  hexv("new_x=", (Q)(U)x);
+  hexv("y=", (Q)(U)y);
+  hexv("cx=", (Q)(U)cx);
+  hexv("cy=", (Q)(U)cy);
+  hexv("flags=", flags);
+  say("\r\n");
+}
 static int hook_SetWindowPos(P w, P after, int x, int y, int cx, int cy, U flags) {
   if (!(flags & 4)) /* SWP_NOZORDER */
     walk_gen++;
+  if ((swp_log_on || swp_dedupe_on) && swp_base) {
+    Q ret = (Q)__builtin_return_address(0);
+    if (ret >= swp_base + 0x74be00 && ret < swp_base + 0x74bf00) {
+      /* Dedupe (opt-in, C:\\sm4l-swp-dedupe-on): the status bar's progress bar is re-positioned to the rectangle it
+       * already has about 120 times per rebuild (all calls were no-ops in the log). Skip exactly that case: caller
+       * in this vendor routine, class msctls_progress32, only SWP_NOZORDER, rectangle unchanged. */
+      if (swp_dedupe_on && flags == 4) {
+        W name[24];
+        static const char want[] = "msctls_progress32";
+        int n = GetClassNameW(w, name, 24), same = n == 17;
+        for (int i = 0; same && i < 17; i++)
+          same = name[i] == (W)want[i];
+        int r[4];
+        if (same && swp_noop_call(w, x, y, cx, cy, flags, r)) {
+          swp_skipped++;
+          return 1;
+        }
+      }
+      if (swp_log_on)
+        swp_note(w, x, y, cx, cy, flags);
+    }
+  }
   return real_SetWindowPos(w, after, x, y, cx, cy, flags);
 }
 static int hook_DestroyWindow(P w) {
@@ -1623,6 +1707,8 @@ static const struct {
 };
 static P hooked_modules[400];
 static int n_hooked, n_patched;
+static Q *iat_slot[700], iat_original[700];
+static int n_iat;
 static int ci_equal(const char *a, const char *b) { /* b is lower case */
   for (; *a && *b; a++, b++)
     if ((*a | 32) != *b)
@@ -1673,7 +1759,9 @@ static void iat_patch(P module) {
         U old;
         if (!*hook_defs[k].orig)
           *hook_defs[k].orig = (void *)*slot;
-        if (VirtualProtect(slot, 8, 4, &old)) {
+        if (n_iat < 700 && VirtualProtect(slot, 8, 4, &old)) {
+          iat_slot[n_iat] = slot;
+          iat_original[n_iat++] = *slot;
           *slot = (Q)hook_defs[k].repl;
           VirtualProtect(slot, 8, old, &old);
           n_patched++;
@@ -1681,6 +1769,19 @@ static void iat_patch(P module) {
       }
     }
   }
+}
+/* Put every patched import slot back (DisconnectFromSW): vendor code must not keep calling into this DLL once CAD
+ * may unload it. The wrappers also stop doing anything. */
+static void iat_restore_all(void) {
+  walk_cache_on = swp_log_on = swp_dedupe_on = 0;
+  for (int i = 0; i < n_iat; i++) {
+    U old;
+    if (VirtualProtect(iat_slot[i], 8, 4, &old)) {
+      *iat_slot[i] = iat_original[i];
+      VirtualProtect(iat_slot[i], 8, old, &old);
+    }
+  }
+  n_iat = n_hooked = n_patched = 0;
 }
 static void counters_hook_modules(void) {
   P process = GetCurrentProcess(), handles[400];
@@ -1751,7 +1852,12 @@ static void counters_poll(void) {
   int on = GetFileAttributesW(L"C:\\sm4l-counters-on") != 0xffffffffu;
   ui_tid = GetCurrentThreadId(); /* the tick runs on the UI thread */
   walk_cache_on = GetFileAttributesW(L"C:\\sm4l-walkcache-on") != 0xffffffffu;
-  if (!on && !walk_cache_on) {
+  int swp_wanted = GetFileAttributesW(L"C:\\sm4l-swplog-on") != 0xffffffffu;
+  if (swp_wanted && !swp_log_on)
+    swp_logged = 0, swp_total = 0, swp_noop = 0;
+  swp_log_on = swp_wanted;
+  swp_dedupe_on = GetFileAttributesW(L"C:\\sm4l-swp-dedupe-on") != 0xffffffffu;
+  if (!on && !walk_cache_on && !swp_log_on && !swp_dedupe_on) {
     armed = 0;
     return;
   }
@@ -1759,6 +1865,11 @@ static void counters_poll(void) {
     armed = 1;
     counters_hook_modules();
     mods_refresh();
+    for (int i = 0; i < samp_nmods; i++) {
+      const char *m = samp_mods[i].name;
+      if (m[0] == 's' && m[1] == 'l' && m[2] == 'd' && m[3] == 'a' && m[4] == 'p' && m[5] == 'p' && m[6] == 'u' && !m[7])
+        swp_base = samp_mods[i].base;
+    }
     hexv("counters armed, hooks=", (Q)n_patched);
     hexv("modules=", (Q)n_hooked);
     say("\r\n");
@@ -1798,6 +1909,12 @@ static void counters_poll(void) {
   hexv("glFinish=", di);
   hexv("SwapBuffers=", ds);
   hexv("CBThook=", dc);
+  if (swp_dedupe_on)
+    hexv("swp_skipped=", swp_skipped);
+  if (swp_log_on) {
+    hexv("swp_total=", swp_total);
+    hexv("swp_noop=", swp_noop);
+  }
   hexv("wc_hit=", wc_hit);
   hexv("wc_miss=", wc_miss);
   if (dc) {
@@ -1833,6 +1950,53 @@ static void counters_poll(void) {
     hexv("widest_parent_children=", window_widest);
   }
   say("\r\n");
+}
+/* Opt-in experiments, each once per flag file:
+ * C:\sm4l-unhook-on holds a hook handle in hex (as printed by a +hook boot: "-> 0x10b5e"); the UI thread calls
+ *   UnhookWindowsHookEx on it and logs the result. Meant for the one WH_CALLWNDPROC hook whose procedure is managed
+ *   code and which makes every message on the UI thread pay a callback. A CAD restart restores it.
+ * C:\sm4l-modmap-dump logs every loaded module (name, base, size) so hook or return addresses can be mapped. */
+__declspec(dllimport) int UnhookWindowsHookEx(P);
+static void experiments_poll(void) {
+  static int unhooked, dumped;
+  P f = GetFileAttributesW(L"C:\\sm4l-unhook-on") != 0xffffffffu ? CreateFileW(L"C:\\sm4l-unhook-on", 0x80000000, 7, 0, 3, 0x80, 0) : (P)-1;
+  if (f == (P)-1) {
+    unhooked = 0;
+  } else {
+    char text[32] = {0};
+    U got = 0;
+    ReadFile(f, text, 30, &got, 0);
+    CloseHandle(f);
+    if (!unhooked && got) {
+      unhooked = 1;
+      Q handle = 0;
+      for (U i = 0; i < got && text[i]; i++) {
+        char c = text[i];
+        int d = c >= '0' && c <= '9' ? c - '0' : (c | 32) >= 'a' && (c | 32) <= 'f' ? (c | 32) - 'a' + 10 : -1;
+        if (d >= 0)
+          handle = (handle << 4) | (Q)d;
+        else if (c == 'x' || c == 'X')
+          handle = 0;
+      }
+      int ok = handle ? UnhookWindowsHookEx((P)handle) : 0;
+      hexv("unhook handle=", handle);
+      hexv("result=", (Q)ok);
+      say("\r\n");
+    }
+  }
+  if (GetFileAttributesW(L"C:\\sm4l-modmap-dump") == 0xffffffffu) {
+    dumped = 0;
+  } else if (!dumped) {
+    dumped = 1;
+    mods_refresh();
+    for (int i = 0; i < samp_nmods; i++) {
+      say("mod ");
+      say(samp_mods[i].name);
+      hexv(" base=", samp_mods[i].base);
+      hexv("size=", samp_mods[i].size);
+      say("\r\n");
+    }
+  }
 }
 /* Opt-in (C:\sm4l-batch-on): five ForceRebuild3 calls back to back on the UI thread, timed, once per flag file.
  * The benchmark from outside returns to the message loop between calls, so every call is followed by an idle pass;
@@ -1878,6 +2042,7 @@ static void tick(P window, U message, Q id, U time) {
 #ifdef SM4L_UI_ADDIN
   sampler_poll();
   counters_poll();
+  experiments_poll();
   batch_poll();
 #endif
   if (busy || !cad)
@@ -1969,6 +2134,8 @@ static H object_query(P self, const GUID *i, P *out) {
 static H disconnect(P self, short *out) {
   (void)self;
 #ifdef SM4L_UI_ADDIN
+  sampler_stop_join();
+  iat_restore_all();
   cbt_remove();
   btn_unhook();
   dtt_restore();
