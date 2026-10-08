@@ -14,7 +14,7 @@ Before you dive into this, please note that this is still in "proof of concept" 
 
 Open issues:
 
-- **Section headers wipe away.** The PropertyManager headers (Type, To Fillet, Parameters, Options) can disappear when a window opens, moves or resizes. This is under investigation.
+- **Section headers wipe away (fixed).** The PropertyManager headers (Type, To Fillet, Parameters, Options) used to disappear. The header hook in the UI add-in keeps them visible, verified live on 2026-10-08, including through drag, resize and with no flicker. The exact caller that drives the drift is still being traced.
 - **3MF export crashes (under investigation).** Save As 3MF crashed CAD. The log ends with Wine msxml parse errors and a `CoMarshalInterface` failure. It may need native msxml6.
 
 ## Where to start
@@ -63,7 +63,7 @@ Tools and experiments (not yet verified):
 - `leftovers.sh`: a diagnostic that lists launcher-side processes that outlive their chain. It kills nothing. Untested.
 - `relay_trace.py`: a trace helper for the header-layout investigation. Untested.
 - `ensure_theme_off.py`: called by `launch_proton.sh` before each start to keep `ThemeActive=0`. Written and tested on a copy only, not live.
-- `padded_border.py`: sets `PaddedBorderWidth` to 4 px in the prefix, which may stop the header layout drift. It edits the registry offline and needs no wineserver running. Untested.
+- `padded_border.py`: a diagnostic that sets `PaddedBorderWidth` to 4 px in the prefix. The result was negative: it didn't stop the header drift. Kept only for reference.
 - The header-wipe fix in `spacemouse-view.c`: built and compile-checked, under test in CAD. This commit is a checkpoint, not a fix.
 
 Run the checks at the end of the replication guide before patching anything. Every patch checks the file's hash first. If one refuses, you've got a different build, so stop and look at it. Don't remove the guard.

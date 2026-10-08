@@ -383,7 +383,7 @@ Keep runtime logs and dumps local, since they can contain credentials or launch 
 
 ## UI compatibility helper
 
-The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. Checkbox and radio labels now come from step 9b, so the helper no longer un-themes controls. It brings fully off-screen owned dialogs back over the owner's window. The section-header wipe is still open.
+The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. Checkbox and radio labels now come from step 9b, so the helper no longer un-themes controls. It brings fully off-screen owned dialogs back over the owner's window. The header hook in the same add-in fixes the section-header wipe. It was verified on 2026-10-08 in Fillet, including drag, resize and no flicker. The kill switches are `C:\sm4l-hdr-nozorder-off` and `C:\sm4l-hdr-clamp-off`, which turn off the z-order and width-pin parts so each can be tested alone.
 
 For an already running CAD session:
 

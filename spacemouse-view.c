@@ -792,6 +792,57 @@ static void dtt_restore(void) {
       patches[i].entry = 0;
     }
 }
+__declspec(dllimport) U GetModuleFileNameW(P, W *, U);
+__declspec(dllimport) int GetModuleHandleExW(U, const void *, P *);
+__declspec(dllimport) unsigned short RtlCaptureStackBackTrace(U, U, P *, U *);
+static int system_path(const W *path) {
+  static const char needle[] = "\\windows\\";
+  for (U i = 0; path[i]; i++) {
+    U k = 0;
+    while (needle[k]) {
+      W c = path[i + k];
+      if (c >= 'A' && c <= 'Z')
+        c = (W)(c + 32);
+      if (c != (W)needle[k])
+        break;
+      k++;
+    }
+    if (!needle[k])
+      return 1;
+    if (!path[i + k])
+      break;
+  }
+  return 0;
+}
+/* Name the module and offset of the first non-system caller on the stack, so
+ * the 0x4124xxxx return addresses in the relay trace get a name. */
+static void caller_log(void) {
+  P frames[24];
+  U hash = 0;
+  unsigned short count = RtlCaptureStackBackTrace(0, 24, frames, &hash);
+  say("callers: ");
+  U shown = 0;
+  for (unsigned short i = 0; i < count && shown < 4; i++) {
+    P module = 0;
+    W path[260];
+    if (!GetModuleHandleExW(4 | 2, frames[i], &module) || !module ||
+        !GetModuleFileNameW(module, path, 260) || system_path(path))
+      continue;
+    const W *name = path;
+    for (U k = 0; path[k]; k++)
+      if (path[k] == '\\')
+        name = path + k + 1;
+    char line[100];
+    U n = 0, w;
+    for (U k = 0; name[k] && n < 60; k++)
+      line[n++] = name[k] < 128 ? (char)name[k] : '?';
+    line[n++] = '+';
+    WriteFile(output(), line, n, &w, 0);
+    hexv("", (Q)((unsigned char *)frames[i] - (unsigned char *)module));
+    shown++;
+  }
+  say("\r\n");
+}
 __declspec(dllimport) P MonitorFromWindow(P, U);
 __declspec(dllimport) int IsIconic(P);
 __declspec(dllimport) int SetWindowPos(P, P, int, int, int, int, U);
@@ -869,6 +920,7 @@ static struct {
   U passes;
 } btn_hooks[128];
 static int nozorder_on, clamp_on;
+static U hdr_total; /* header layout passes seen, all headers */
 __declspec(dllimport) int GetClientRect(P, int *);
 __declspec(dllimport) int ClientToScreen(P, int *);
 static void geom_log(const char *what, P window) {
@@ -889,6 +941,46 @@ static void geom_log(const char *what, P window) {
   hexv("org_y=", (Q)(unsigned)org[1]);
   say("\r\n");
 }
+__declspec(dllimport) int GetScrollInfo(P, int, U *);
+__declspec(dllimport) int ScreenToClient(P, int *);
+__declspec(dllimport) int MapWindowPoints(P, P, int *, U);
+static void one_window_geom(const char *what, P w) {
+  int win[4] = {0, 0, 0, 0}, cli[4] = {0, 0, 0, 0};
+  GetWindowRect(w, win);
+  GetClientRect(w, cli);
+  U si[7] = {28, 0x17, 0, 0, 0, 0, 0}; /* SCROLLINFO: SIF_RANGE|PAGE|POS|TRACKPOS */
+  int have = GetScrollInfo(w, 1, si);  /* SB_VERT */
+  U style = (U)GetWindowLongPtrW(w, -16);
+  say(what);
+  hexv("w=", (Q)w);
+  hexv("cw=", (Q)(unsigned)cli[2]);
+  hexv("ch=", (Q)(unsigned)cli[3]);
+  hexv("ww=", (Q)(unsigned)(win[2] - win[0]));
+  hexv("style=", style);
+  hexv("vscroll_bit=", (Q)((style >> 21) & 1));
+  hexv("sbinfo=", (Q)have);
+  hexv("nMax=", (Q)si[3]);
+  hexv("nPage=", (Q)si[4]);
+}
+/* Per layout pass: the panel's and its parent's client width and scroll state,
+ * and the header's live left edge converted two ways (ScreenToClient and
+ * MapWindowPoints), to see whether the page width oscillates and whether the
+ * two conversions agree. */
+static void pass_geom(P button, const char *what) {
+  P panel = GetParent(button);
+  int win[4] = {0, 0, 0, 0}, pt1[2], pt2[2];
+  GetWindowRect(button, win);
+  pt1[0] = pt2[0] = win[0];
+  pt1[1] = pt2[1] = win[1];
+  ScreenToClient(panel, pt1);
+  MapWindowPoints(0, panel, pt2, 1);
+  one_window_geom(what, panel);
+  hexv("left_s2c=", (Q)(unsigned)pt1[0]);
+  hexv("left_map=", (Q)(unsigned)pt2[0]);
+  say("\r\n");
+  one_window_geom("gp ", GetParent(panel));
+  say("\r\n");
+}
 static long long btn_proc(P window, U message, Q wparam, Q lparam) {
   long long original = 0;
   U slot;
@@ -904,6 +996,7 @@ static long long btn_proc(P window, U message, Q wparam, Q lparam) {
     /* A header row: height 13, moved and resized together. */
     if (wp[7] == 13 && !((U)wp[8] & 3)) {
       U pass = ++btn_hooks[slot].passes;
+      hdr_total++;
       int x_in = wp[4], cx_in = wp[6];
       U flags_in = (U)wp[8];
       if (!btn_hooks[slot].have) {
@@ -934,12 +1027,24 @@ static long long btn_proc(P window, U message, Q wparam, Q lparam) {
         hexv("flags_out=", (Q)(unsigned)wp[8]);
         hexv("x0=", (Q)(unsigned)btn_hooks[slot].first_x);
         say("\r\n");
+        pass_geom(window, "pg ");
+      }
+      /* The drifting passes come with flags 0 (the early, stable ones with 0x14):
+       * name their callers too. */
+      static U drift_callers;
+      if (flags_in == 0 && drift_callers < 3) {
+        drift_callers++;
+        say("drift ");
+        hexv("w=", (Q)window);
+        hexv("pass=", pass);
+        caller_log();
       }
       static U geoms;
       if (pass == 1 && geoms < 4) {
         geoms++;
         geom_log("geom button ", window);
         geom_log("geom panel ", GetParent(window));
+        caller_log();
       }
     }
   }
@@ -1196,6 +1301,26 @@ static void snapshot(void) {
     }
   }
 }
+/* Header layout pass rate: once every 5 s, how many passes ran since the last
+ * line, so the log shows whether the layout/invalidate loop keeps running and
+ * how fast (CPU and flicker cost). */
+static void hdr_rate(void) {
+  static Q last_ms;
+  static U last_total;
+  Q now = GetTickCount64();
+  if (!last_ms)
+    last_ms = now;
+  if (now - last_ms < 5000)
+    return;
+  if (hdr_total != last_total) {
+    say("hdr rate ");
+    hexv("passes_in_5s=", (Q)(hdr_total - last_total));
+    hexv("total=", (Q)hdr_total);
+    say("\r\n");
+  }
+  last_total = hdr_total;
+  last_ms = now;
+}
 static void tick(P window, U message, Q id, U time) {
   (void)message;
   (void)id;
@@ -1209,6 +1334,7 @@ static void tick(P window, U message, Q id, U time) {
     cbt_tried = 1;
     cbt_install();
   }
+  hdr_rate();
   if (diag_only) {
     snapshot();
     diag();
