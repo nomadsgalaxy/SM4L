@@ -312,6 +312,12 @@ Exit code 2 means another bridge already holds the prefix lock. The units don't 
 
 **Check:** `systemctl --user status sm4l-launcher.service` shows the unit running, and `curl --head --max-time 5 http://127.0.0.1:20250/` answers.
 
+### A note on the 3DEXPERIENCE PLM connector hook
+
+The UI add-in unhooks the 3DEXPERIENCE PLM connector's `WH_CALLWNDPROC` hook after startup, because that hook adds a large share of the UI-thread cost under Wine. This is on by default, and the build loads at the next CAD start. On the reference machine, the in-CAD batch rebuild median went from 135 ms (range 88 to 403 ms) to 52 ms (range 46 to 63 ms), measured on 2026-10-08. A local-files workflow was checked by hand.
+
+It has a cost. The connector also tracks windows for 3DEXPERIENCE features, including saving and opening from the platform, the 3DEXPERIENCE tab or task pane, lifecycle and collaboration. Unhooking it disables that tracking. Local files work normally, and that's the workflow that's been checked. Nothing has been tested for the 3DEXPERIENCE platform workflows. If you use them, create the file `C:\sm4l-unhook-pdm-off` in the prefix's `drive_c` folder, then restart CAD to keep the hook. A CAD restart brings the hook back, and the add-in never changes the DLL on disk.
+
 ## 13. Apply the header-control crash fix
 
 **Status: verified.** Patch the prefix's amd64 copy of Wine's Common Controls before opening CAD:

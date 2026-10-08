@@ -1450,7 +1450,11 @@ static U sampler_thread(P unused) {
     Sleep(2);
   }
   CloseHandle(file);
-  hexv("sampler finished, samples=", (Q)samples);
+  /* why the loop ended: quit flag, 60 s limit, or the stop file (hexv labels are cut at 24 characters) */
+  hexv("sampler quit=", (Q)sampler_quit);
+  hexv("elapsed_ms=", GetTickCount64() - start);
+  hexv("stopfile_attr=", (Q)GetFileAttributesW(L"C:\\sm4l-sample-stop"));
+  hexv("samples=", (Q)samples);
   say("\r\n");
   sampler_state = 2;
   return (U)samples;
@@ -1463,6 +1467,7 @@ static void sampler_poll(void) {
     __asm__ volatile("movq %%gs:8, %0" : "=r"(samp_stack_base));
     samp_ui_thread = OpenThread(0x4a, 0, GetCurrentThreadId());
     mods_refresh();
+    sampler_quit = 0; /* a stale quit flag must not end the new thread at once */
     sampler_handle = samp_ui_thread ? CreateThread(0, 0, sampler_thread, 0, 0, 0) : 0;
     if (sampler_handle) {
       sampler_state = 1;
@@ -1886,8 +1891,11 @@ static void counters_poll(void) {
   if ((on || walk_cache_on || swp_log_on || mdicache_on) && !hook_scope_all) {
     hook_scope_all = 1; /* an experiment wants the counting hooks too: rescan every module with the full set */
     n_hooked = 0;
-    if (armed)
+    if (armed) {
       counters_hook_modules();
+      hexv("counters armed (upgrade), hooks=", (Q)n_patched);
+      say("\r\n");
+    }
   }
   if (!on && !walk_cache_on && !swp_log_on && !swp_dedupe_on && !mdicache_on) {
     armed = 0;
@@ -1999,8 +2007,10 @@ static void counters_poll(void) {
  *   code and which makes every message on the UI thread pay a callback. A CAD restart restores it.
  * C:\sm4l-modmap-dump logs every loaded module (name, base, size) so hook or return addresses can be mapped. */
 __declspec(dllimport) int UnhookWindowsHookEx(P);
+static void pdm_unhook_poll(void);
 static void experiments_poll(void) {
   static int unhooked, dumped;
+  pdm_unhook_poll();
   P f = GetFileAttributesW(L"C:\\sm4l-unhook-on") != 0xffffffffu ? CreateFileW(L"C:\\sm4l-unhook-on", 0x80000000, 7, 0, 3, 0x80, 0) : (P)-1;
   if (f == (P)-1) {
     unhooked = 0;
@@ -2039,6 +2049,82 @@ static void experiments_poll(void) {
       say("\r\n");
     }
   }
+}
+/* PDM connector hook (on by default; C:\sm4l-unhook-pdm-off turns it off): USWC\PDMSWV6.dll, the 3DEXPERIENCE PLM Services
+ * connector, installs one WH_CALLWNDPROC hook on the UI thread during CAD startup; every message sent on that thread then
+ * pays a callback into the DLL (releasing it made rebuilds about 2.6x faster). After the readiness gate this finds the
+ * module, checks that it is the exact build described in pdm_hook.h (image size and the code bytes at the install site),
+ * reads the hook handle the DLL keeps in a global, calls UnhookWindowsHookEx on the UI thread once and leaves the global
+ * untouched, so the DLL believes the hook is installed and does not install it again. Any other build is left alone. A CAD
+ * restart restores the hook. */
+#include "pdm_hook.h"
+__declspec(dllimport) int ReadProcessMemory(P, const void *, void *, Q, Q *);
+__declspec(dllimport) U GetLastError(void);
+static Q pdm_base, pdm_stale_handle;
+static void pdm_unhook_poll(void) {
+  static int done, said, ticks;
+  int enabled = GetFileAttributesW(L"C:\\sm4l-unhook-pdm-off") == 0xffffffffu;
+  /* the DLL may load, or install its hook, late (3DEXPERIENCE sign-in): try every tick for 20 s, then every 10 s */
+  if (done || !enabled || (++ticks > 40 && ticks % 20))
+    return;
+  mods_refresh();
+  Q base = 0;
+  U size = 0;
+  for (int i = 0; i < samp_nmods; i++) {
+    static const char want[] = "pdmswv6";
+    const char *m = samp_mods[i].name;
+    int k = 0;
+    while (want[k] && m[k] == want[k])
+      k++;
+    if (!want[k] && !m[k]) {
+      base = samp_mods[i].base;
+      size = samp_mods[i].size;
+    }
+  }
+  unsigned char code[PDM_CODE_LENGTH];
+  Q handle = 0, count = 0, n = 0;
+  int build_ok = 0;
+  if (base) {
+    build_ok = size == PDM_IMAGE_SIZE && ReadProcessMemory(GetCurrentProcess(), (const void *)(base + PDM_CODE_RVA), code, sizeof code, &n) &&
+               n == sizeof code && pdm_build_matches(size, code);
+    if (build_ok) {
+      ReadProcessMemory(GetCurrentProcess(), (const void *)(base + PDM_HANDLE_RVA), &handle, 8, &n);
+      ReadProcessMemory(GetCurrentProcess(), (const void *)(base + PDM_COUNT_RVA), &count, 4, &n);
+    }
+  }
+  int action = pdm_action(enabled, base != 0, build_ok, handle);
+  if (action == PDM_NOT_LOADED || action == PDM_NO_HOOK_YET) {
+    if (!said)
+      say(action == PDM_NOT_LOADED ? "pdm unhook: PDMSWV6.dll is not loaded yet (will retry)\r\n" : "pdm unhook: its hook is not installed yet (will retry)\r\n");
+    said = 1;
+    return;
+  }
+  done = 1;
+  if (action == PDM_OTHER_BUILD) {
+    hexv("pdm: other size=", size);
+    say("(not touching it)\r\n");
+    return;
+  }
+  int ok = UnhookWindowsHookEx((P)handle);
+  hexv("pdm unhook: handle=", handle);
+  hexv("refcount=", count & 0xffffffffu);
+  hexv("result=", (Q)ok);
+  hexv("error=", ok ? 0 : (Q)GetLastError());
+  say("\r\n");
+  pdm_base = base;
+  pdm_stale_handle = handle;
+}
+/* DisconnectFromSW: say whether the connector's global still holds the handle we released (it should: that keeps it from
+ * installing the hook again). Reads through ReadProcessMemory so an unloaded module cannot fault, and never takes the
+ * loader lock. */
+static void pdm_report_at_disconnect(void) {
+  if (!pdm_stale_handle)
+    return;
+  Q now = 0, n = 0;
+  int ok = ReadProcessMemory(GetCurrentProcess(), (const void *)(pdm_base + PDM_HANDLE_RVA), &now, 8, &n);
+  hexv("pdm global now=", ok ? now : 0);
+  hexv("stale handle=", pdm_stale_handle);
+  say(ok && now == pdm_stale_handle ? "unchanged\r\n" : "changed or unreadable\r\n");
 }
 /* Opt-in (C:\sm4l-batch-on): five ForceRebuild3 calls back to back on the UI thread, timed, once per flag file.
  * The benchmark from outside returns to the message loop between calls, so every call is followed by an idle pass;
@@ -2176,6 +2262,7 @@ static H object_query(P self, const GUID *i, P *out) {
 static H disconnect(P self, short *out) {
   (void)self;
 #ifdef SM4L_UI_ADDIN
+  pdm_report_at_disconnect();
   sampler_stop_join();
   iat_restore_all();
   cbt_remove();

@@ -67,6 +67,7 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 | Save As 3MF needs native msxml6 | Verified once | Step 15 in [INSTALL.md](docs/INSTALL.md) |
 | Labels need the theme off | Verified | Step 14. The look is classic and flatter |
 | Native KDE file chooser isn't integrated | Open | Use the normal file dialogs |
+| 3DEXPERIENCE PLM connector hook removal | Default-on; verified for local files | Removing one connector hook cuts UI-thread cost, but it also disables the connector's window tracking. Untested for 3DEXPERIENCE platform workflows. Read the trade-off below before you use it |
 | Fresh-machine replay not done | Open | Check each step's result as you go |
 
 ## Where to start
@@ -78,6 +79,14 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 5. [Read the findings](docs/FINDINGS.md) for why each fix exists.
 
 Moving from the earlier layout? See [MIGRATION.md](docs/MIGRATION.md).
+
+## Trade-off: the 3DEXPERIENCE PLM connector hook
+
+A large share of SOLIDWORKS' UI-thread cost under Wine comes from one `WH_CALLWNDPROC` hook. The 3DEXPERIENCE PLM connector installs it on each UI thread (`PDMSWV6.dll`), even when its add-in startup value is 0. Every window message then pays extra callbacks. On the reference machine, the in-CAD batch rebuild median went from 135 ms with the hook (range 88 to 403 ms) to 52 ms with it removed (range 46 to 63 ms), measured on 2026-10-08. An earlier A/B in one session gave 96 ms and 63 ms.
+
+The add-in unhooks the connector's hook after the readiness gate, and this is on by default. It acts only on the exact `PDMSWV6.dll` build it was tested against, and it never changes the DLL on disk. The build is loaded at the next CAD start. On the reference machine, the unhook call succeeded, and a local-files workflow was checked by hand: the ribbon, the panels, the task pane and saving all worked.
+
+**The trade-off:** the connector also tracks windows for 3DEXPERIENCE features. Removing its hook disables that tracking. The reference machine works with local files only, so that's the workflow that's been checked. Nothing has been tested for saving or opening from the 3DEXPERIENCE platform, the 3DEXPERIENCE tab or task pane, lifecycle, or collaboration. If you use any of those, create the file `C:\sm4l-unhook-pdm-off` in the prefix's `drive_c` folder, then restart CAD to keep the hook. Or test your workflow and report back. A CAD restart brings the hook back either way.
 
 ## What you need to bring
 

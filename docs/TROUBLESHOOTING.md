@@ -102,6 +102,14 @@ After a prefix update or a recreated prefix, run step 14 again. `setup/ensure_th
 
 Check the file's SHA256 against the original before you restore it. Don't restore an unknown file.
 
+## Saving or opening from the 3DEXPERIENCE platform misbehaves
+
+**You see:** save, open, or 3DEXPERIENCE tab and task pane features fail or behave oddly, after the PLM connector hook change.
+
+**Usual cause:** the connector's window tracking is off, because its hook was removed. The add-in does this by default.
+
+**Do this:** if you use the 3DEXPERIENCE features, turn the release off. Create the file `C:\sm4l-unhook-pdm-off` in the prefix's `drive_c` folder, then restart CAD. The hook comes back on the next start. The release hasn't been tested for these workflows, so report what fails.
+
 ## Section headers are missing or wiped
 
 **You see:** PropertyManager headers such as Type, To Fillet, Parameters or Options disappear, especially after a drag or resize.
