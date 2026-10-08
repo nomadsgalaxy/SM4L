@@ -1092,7 +1092,12 @@ __declspec(dllimport) P SetWindowsHookExW(int, long long (*)(int, Q, Q), P, U);
 __declspec(dllimport) int UnhookWindowsHookEx(P);
 __declspec(dllimport) long long CallNextHookEx(P, int, Q, Q);
 static P cbt_hook;
+static volatile Q cbt_calls, cbt_by_code[16], walk_gen; /* walk_gen: bumped when the window tree may have changed */
 static long long cbt_proc(int code, Q wparam, Q lparam) {
+  cbt_calls++;
+  cbt_by_code[code & 15]++;
+  if (code == 3 || code == 4 || code == 5) /* HCBT_CREATEWND, DESTROYWND, ACTIVATE */
+    walk_gen++;
   if (code == 3 && wparam && lparam) { /* HCBT_CREATEWND */
     const char *create = *(const char *const *)lparam; /* CREATESTRUCTW * */
     if (create && ((*(const int *)(create + 48)) & 15) == 11) {
@@ -1321,10 +1326,560 @@ static void hdr_rate(void) {
   last_total = hdr_total;
   last_ms = now;
 }
+#ifdef SM4L_UI_ADDIN
+/* Opt-in profiler (C:\sm4l-sampler-on): a second thread of this process pauses the UI thread for a few
+ * microseconds about every 2 ms, copies its registers and stack, resumes it, then scans the copy for return
+ * addresses in loaded modules and writes "S <rip module+rva> <frame> <frame> ..." lines to C:\sm4l-sample.txt.
+ * It runs until C:\sm4l-sample-stop appears or 60 s pass. Nothing is allocated or locked while the UI thread
+ * is paused. Wine refuses cross-process memory reads, so this has to run inside sldworks.exe. */
+__declspec(dllimport) P CreateThread(P, Q, U (*)(P), P, U, U *);
+__declspec(dllimport) P OpenThread(U, int, U);
+__declspec(dllimport) U SuspendThread(P);
+__declspec(dllimport) U ResumeThread(P);
+__declspec(dllimport) int GetThreadContext(P, void *);
+__declspec(dllimport) P GetCurrentProcess(void);
+__declspec(dllimport) int K32EnumProcessModules(P, P *, U, U *);
+__declspec(dllimport) int K32GetModuleInformation(P, P, void *, U);
+__declspec(dllimport) U K32GetModuleBaseNameA(P, P, char *, U);
+typedef struct {
+  Q base;
+  U size;
+  char name[20];
+} SampMod;
+static SampMod samp_mods[400];
+static int samp_nmods;
+static P samp_ui_thread;
+static Q samp_stack_base; /* UI thread's TEB StackBase: the stack copy below never reads past it */
+static volatile int sampler_state; /* 0 idle, 1 running, 2 finished (waits for the flag to go) */
+static int samp_fmt(char *o, Q a) {
+  for (int i = 0; i < samp_nmods; i++)
+    if (a >= samp_mods[i].base && a < samp_mods[i].base + samp_mods[i].size) {
+      int n = 0;
+      for (const char *p = samp_mods[i].name; *p; p++)
+        o[n++] = *p;
+      o[n++] = '+';
+      for (int s = 28; s >= 0; s -= 4) {
+        int d = (int)((a - samp_mods[i].base) >> s) & 15;
+        o[n++] = (char)(d < 10 ? '0' + d : 'a' + d - 10);
+      }
+      return n;
+    }
+  return 0;
+}
+static void mods_refresh(void) {
+  P process = GetCurrentProcess(), handles[400];
+  U needed = 0;
+  samp_nmods = 0;
+  K32EnumProcessModules(process, handles, sizeof handles, &needed);
+  for (U i = 0; i < needed / sizeof(P) && samp_nmods < 400; i++) {
+    struct {
+      Q base;
+      U size, pad;
+      Q entry;
+    } info;
+    char name[64];
+    if (!K32GetModuleInformation(process, handles[i], &info, sizeof info))
+      continue;
+    U length = K32GetModuleBaseNameA(process, handles[i], name, sizeof name);
+    SampMod *m = &samp_mods[samp_nmods++];
+    m->base = info.base;
+    m->size = info.size;
+    U k = 0;
+    for (U j = 0; j < length && k < 19 && name[j] != '.'; j++)
+      m->name[k++] = (char)(name[j] | 32);
+    m->name[k] = 0;
+  }
+}
+static U sampler_thread(P unused) {
+  (void)unused;
+  P file = CreateFileW(L"C:\\sm4l-sample.txt", 0x40000000, 3, 0, 2, 0x80, 0);
+  P process = GetCurrentProcess();
+  (void)process;
+  mods_refresh();
+  static unsigned char ctx[1232] __attribute__((aligned(16)));
+  static Q stack[1024];
+  Q start = GetTickCount64();
+  int samples = 0;
+  while (GetTickCount64() - start < 60000 && GetFileAttributesW(L"C:\\sm4l-sample-stop") == 0xffffffffu) {
+    Q got = 0;
+    SuspendThread(samp_ui_thread);
+    *(U *)(ctx + 0x30) = 0x100001;
+    int ok = GetThreadContext(samp_ui_thread, ctx);
+    Q rip = *(Q *)(ctx + 0xf8), rsp = *(Q *)(ctx + 0x98);
+    /* Plain loads from the UI thread's own stack: no system call and no lock while it is paused. */
+    if (ok && rsp < samp_stack_base && samp_stack_base - rsp < 0x4000000) {
+      Q words = (samp_stack_base - rsp) / 8;
+      if (words > sizeof stack / 8)
+        words = sizeof stack / 8;
+      for (Q i = 0; i < words; i++)
+        stack[i] = ((volatile const Q *)rsp)[i];
+      got = words * 8;
+    }
+    ResumeThread(samp_ui_thread);
+    if (ok) {
+      char line[512];
+      int n = 0, found = 0, last_n = 0;
+      char last[40];
+      line[n++] = 'S';
+      line[n++] = ' ';
+      int w = samp_fmt(line + n, rip);
+      n += w;
+      for (Q i = 0; i < got / 8 && found < 8; i++) {
+        char tmp[40];
+        int tn = samp_fmt(tmp, stack[i]);
+        if (!tn)
+          continue;
+        int same = tn == last_n;
+        for (int j = 0; same && j < tn; j++)
+          if (tmp[j] != last[j])
+            same = 0;
+        if (same)
+          continue;
+        line[n++] = ' ';
+        for (int j = 0; j < tn; j++)
+          line[n++] = last[j] = tmp[j];
+        last_n = tn;
+        found++;
+      }
+      line[n++] = '\n';
+      U written;
+      WriteFile(file, line, (U)n, &written, 0);
+      samples++;
+    }
+    Sleep(2);
+  }
+  CloseHandle(file);
+  sampler_state = 2;
+  return (U)samples;
+}
+static void sampler_poll(void) {
+  int on = GetFileAttributesW(L"C:\\sm4l-sampler-on") != 0xffffffffu;
+  if (sampler_state == 2 && !on)
+    sampler_state = 0;
+  if (sampler_state == 0 && on) {
+    __asm__ volatile("movq %%gs:8, %0" : "=r"(samp_stack_base));
+    samp_ui_thread = OpenThread(0x4a, 0, GetCurrentThreadId());
+    if (samp_ui_thread && CreateThread(0, 0, sampler_thread, 0, 0, 0)) {
+      sampler_state = 1;
+      say("sampler armed\r\n");
+    }
+  }
+}
+/* Opt-in call counters (C:\sm4l-counters-on): log-only IAT hooks on user32's GetWindow, GetTopWindow, SendMessageW/A and
+ * UpdateWindow in the vendor modules (sld*, mfc*, dc*, doccpl*, ps*, swstyle*). Every tick (0.5 s) that saw calls,
+ * and every 2 s regardless, one "cnt ..." line goes to the log: calls since the last line, the most frequent message
+ * IDs sent, and every 4th line the number of windows in this process with the largest direct-child count. */
+static Q cnt_getwindow, cnt_gettop, cnt_sendmsg, cnt_updatewin, cnt_glflush, cnt_glfinish, cnt_swap, wc_hit, wc_miss;
+static U ui_tid;
+static int walk_cache_on;
+/* Caller histograms: return address of each hooked call, bucketed to 256 bytes. */
+typedef struct {
+  Q key, n;
+} Hist;
+static Hist hist_walk[128], hist_mdi[128], hist_send[128];
+static void hist_add(Hist *h, Q ret) {
+  Q key = (ret >> 8) + 1;
+  U at = (U)((key * 0x9e3779b97f4a7c15ull) >> 57);
+  for (int i = 0; i < 128; i++, at = (at + 1) & 127) {
+    if (h[at].key == key) {
+      h[at].n++;
+      return;
+    }
+    if (!h[at].key) {
+      h[at].key = key;
+      h[at].n = 1;
+      return;
+    }
+  }
+}
+/* Walk cache (opt-in, C:\sm4l-walkcache-on): GetWindow(GW_CHILD / GW_HWNDNEXT) and GetTopWindow results remembered per
+ * (window, relation) for the UI thread, valid while walk_gen is unchanged and for at most 100 ms, and only if a cached
+ * window handle still passes IsWindow. Each real call is a
+ * wineserver round trip. walk_gen is bumped on window create/destroy/activate (our CBT hook) and by the hooked
+ * SetWindowPos (z-order changes only), SetParent, DestroyWindow, BringWindowToTop and EndDeferWindowPos. */
+__declspec(dllimport) int IsWindow(P);
+typedef struct {
+  Q key, val, gen, stamp;
+} WcEntry;
+static WcEntry wc_table[4096];
+static Q walk_cached(P w, U rel, Q (*real)(P, U)) {
+  Q key = ((Q)w << 3) | rel, now = GetTickCount64();
+  WcEntry *e = &wc_table[(key * 0x9e3779b97f4a7c15ull) >> 52];
+  if (e->key == key && e->gen == walk_gen && now - e->stamp < 100 && (!e->val || IsWindow((P)e->val))) {
+    wc_hit++;
+    return e->val;
+  }
+  Q value = real(w, rel);
+  wc_miss++;
+  e->key = key, e->val = value, e->gen = walk_gen, e->stamp = now;
+  return value;
+}
+static Q msg_id[32], msg_count[32];
+static Q (*real_GetWindow)(P, U);
+static Q (*real_GetTopWindow)(P);
+static long long (*real_SendMessageW)(P, U, Q, Q);
+static long long (*real_SendMessageA)(P, U, Q, Q);
+static int (*real_UpdateWindow)(P);
+static int (*real_SetWindowPos)(P, P, int, int, int, int, U);
+static int (*real_DestroyWindow)(P);
+static P (*real_SetParent)(P, P);
+static int (*real_BringWindowToTop)(P);
+static int (*real_EndDeferWindowPos)(P);
+static void (*real_glFlush)(void);
+static void (*real_glFinish)(void);
+static int (*real_SwapBuffers)(P);
+static void msg_note(U m, Q ret) {
+  cnt_sendmsg++;
+  hist_add(m == 0x229 ? hist_mdi : hist_send, ret);
+  for (int i = 0; i < 32; i++) {
+    if (msg_id[i] == m + 1) {
+      msg_count[i]++;
+      return;
+    }
+    if (!msg_id[i]) {
+      msg_id[i] = m + 1;
+      msg_count[i] = 1;
+      return;
+    }
+  }
+}
+static Q hook_GetWindow(P w, U c) {
+  cnt_getwindow++;
+  hist_add(hist_walk, (Q)__builtin_return_address(0));
+  if (walk_cache_on && w && (c == 5 || c == 2) && GetCurrentThreadId() == ui_tid)
+    return walk_cached(w, c, real_GetWindow);
+  return real_GetWindow(w, c);
+}
+static Q hook_GetTopWindow(P w) {
+  cnt_gettop++;
+  hist_add(hist_walk, (Q)__builtin_return_address(0));
+  if (walk_cache_on && w && real_GetWindow && GetCurrentThreadId() == ui_tid)
+    return walk_cached(w, 5, real_GetWindow); /* GetTopWindow(w) is GetWindow(w, GW_CHILD) */
+  return real_GetTopWindow(w);
+}
+static long long hook_SendMessageW(P w, U m, Q a, Q b) {
+  msg_note(m, (Q)__builtin_return_address(0));
+  return real_SendMessageW(w, m, a, b);
+}
+static long long hook_SendMessageA(P w, U m, Q a, Q b) {
+  msg_note(m, (Q)__builtin_return_address(0));
+  return real_SendMessageA(w, m, a, b);
+}
+static int hook_UpdateWindow(P w) {
+  cnt_updatewin++;
+  return real_UpdateWindow(w);
+}
+static int hook_SetWindowPos(P w, P after, int x, int y, int cx, int cy, U flags) {
+  if (!(flags & 4)) /* SWP_NOZORDER */
+    walk_gen++;
+  return real_SetWindowPos(w, after, x, y, cx, cy, flags);
+}
+static int hook_DestroyWindow(P w) {
+  walk_gen++;
+  return real_DestroyWindow(w);
+}
+static P hook_SetParent(P w, P parent) {
+  walk_gen++;
+  return real_SetParent(w, parent);
+}
+static int hook_BringWindowToTop(P w) {
+  walk_gen++;
+  return real_BringWindowToTop(w);
+}
+static int hook_EndDeferWindowPos(P h) {
+  walk_gen++;
+  return real_EndDeferWindowPos(h);
+}
+static void hook_glFlush(void) {
+  cnt_glflush++;
+  real_glFlush();
+}
+static void hook_glFinish(void) {
+  cnt_glfinish++;
+  real_glFinish();
+}
+static int hook_SwapBuffers(P dc) {
+  cnt_swap++;
+  return real_SwapBuffers(dc);
+}
+static const struct {
+  const char *dll, *fn;
+  void *repl;
+  void **orig;
+} hook_defs[] = {
+    {"user32.dll", "GetWindow", hook_GetWindow, (void **)&real_GetWindow},
+    {"user32.dll", "GetTopWindow", hook_GetTopWindow, (void **)&real_GetTopWindow},
+    {"user32.dll", "SendMessageW", hook_SendMessageW, (void **)&real_SendMessageW},
+    {"user32.dll", "SendMessageA", hook_SendMessageA, (void **)&real_SendMessageA},
+    {"user32.dll", "UpdateWindow", hook_UpdateWindow, (void **)&real_UpdateWindow},
+    {"user32.dll", "SetWindowPos", hook_SetWindowPos, (void **)&real_SetWindowPos},
+    {"user32.dll", "DestroyWindow", hook_DestroyWindow, (void **)&real_DestroyWindow},
+    {"user32.dll", "SetParent", hook_SetParent, (void **)&real_SetParent},
+    {"user32.dll", "BringWindowToTop", hook_BringWindowToTop, (void **)&real_BringWindowToTop},
+    {"user32.dll", "EndDeferWindowPos", hook_EndDeferWindowPos, (void **)&real_EndDeferWindowPos},
+    {"opengl32.dll", "glFlush", hook_glFlush, (void **)&real_glFlush},
+    {"opengl32.dll", "glFinish", hook_glFinish, (void **)&real_glFinish},
+    {"gdi32.dll", "SwapBuffers", hook_SwapBuffers, (void **)&real_SwapBuffers},
+};
+static P hooked_modules[400];
+static int n_hooked, n_patched;
+static int ci_equal(const char *a, const char *b) { /* b is lower case */
+  for (; *a && *b; a++, b++)
+    if ((*a | 32) != *b)
+      return 0;
+  return *a == *b;
+}
+static int vendor_name(const char *n) {
+  static const char *const prefix[] = {"sld", "mfc", "dcu", "doccpl", "ps", "swstyle", "pskernel"};
+  for (U i = 0; i < sizeof prefix / sizeof *prefix; i++) {
+    const char *p = prefix[i];
+    int k = 0;
+    while (p[k] && (n[k] | 32) == p[k])
+      k++;
+    if (!p[k])
+      return 1;
+  }
+  return 0;
+}
+static void iat_patch(P module) {
+  unsigned char *base = module;
+  if (*(unsigned short *)base != 0x5a4d)
+    return;
+  unsigned char *nt = base + *(int *)(base + 0x3c);
+  if (*(U *)nt != 0x4550 || *(unsigned short *)(nt + 0x18) != 0x20b)
+    return;
+  U import_rva = *(U *)(nt + 0x18 + 0x78); /* DataDirectory[1].VirtualAddress (optional header +0x70 is entry 0) */
+  if (!import_rva)
+    return;
+  for (unsigned char *d = base + import_rva; *(U *)(d + 12); d += 20) {
+    const char *dll = (const char *)(base + *(U *)(d + 12));
+    int known = 0;
+    for (U k = 0; k < sizeof hook_defs / sizeof *hook_defs; k++)
+      known |= ci_equal(dll, hook_defs[k].dll);
+    if (!known)
+      continue;
+    U names_rva = *(U *)d ? *(U *)d : *(U *)(d + 16);
+    Q *name_rva = (Q *)(base + names_rva), *slot = (Q *)(base + *(U *)(d + 16));
+    for (; *name_rva; name_rva++, slot++) {
+      if (*name_rva >> 63)
+        continue; /* import by ordinal */
+      const char *fn = (const char *)(base + *name_rva + 2);
+      for (U k = 0; k < sizeof hook_defs / sizeof *hook_defs; k++) {
+        int j = 0;
+        while (fn[j] && fn[j] == hook_defs[k].fn[j])
+          j++;
+        if (fn[j] || hook_defs[k].fn[j] || !ci_equal(dll, hook_defs[k].dll) || *slot == (Q)hook_defs[k].repl)
+          continue;
+        U old;
+        if (!*hook_defs[k].orig)
+          *hook_defs[k].orig = (void *)*slot;
+        if (VirtualProtect(slot, 8, 4, &old)) {
+          *slot = (Q)hook_defs[k].repl;
+          VirtualProtect(slot, 8, old, &old);
+          n_patched++;
+        }
+      }
+    }
+  }
+}
+static void counters_hook_modules(void) {
+  P process = GetCurrentProcess(), handles[400];
+  U needed = 0;
+  K32EnumProcessModules(process, handles, sizeof handles, &needed);
+  for (U i = 0; i < needed / sizeof(P) && i < 400; i++) {
+    int seen = 0;
+    for (int k = 0; k < n_hooked; k++)
+      seen |= hooked_modules[k] == handles[i];
+    char name[64];
+    if (seen || !K32GetModuleBaseNameA(process, handles[i], name, sizeof name) || !vendor_name(name))
+      continue;
+    hooked_modules[n_hooked++] = handles[i];
+    iat_patch(handles[i]);
+  }
+}
+static Q window_total, window_widest, window_pid;
+static void window_walk(P parent, int depth) {
+  Q kids = 0;
+  for (P c = (P)GetWindow(parent, 5 /* GW_CHILD */); c && window_total < 50000; c = (P)GetWindow(c, 2 /* GW_HWNDNEXT */)) {
+    kids++;
+    window_total++;
+    if (depth < 12)
+      window_walk(c, depth + 1);
+  }
+  if (kids > window_widest)
+    window_widest = kids;
+}
+static int window_top(P w, Q unused) {
+  (void)unused;
+  U pid = 0;
+  GetWindowThreadProcessId(w, &pid);
+  if (pid == window_pid) {
+    window_total++;
+    window_walk(w, 0);
+  }
+  return 1;
+}
+static void hist_dump(const char *label, Hist *h) {
+  for (int top = 0; top < 8; top++) {
+    int best = -1;
+    for (int i = 0; i < 128; i++)
+      if (h[i].key && h[i].n && (best < 0 || h[i].n > h[best].n))
+        best = i;
+    if (best < 0)
+      break;
+    char name[40];
+    int n = samp_fmt(name, (h[best].key - 1) << 8);
+    say("callers ");
+    say(label);
+    say(" ");
+    if (n) {
+      name[n] = 0;
+      say(name);
+    } else {
+      hexv("", (h[best].key - 1) << 8);
+    }
+    hexv(" n=", h[best].n);
+    say("\r\n");
+    h[best].n = 0;
+  }
+  for (int i = 0; i < 128; i++)
+    h[i].n = 0, h[i].key = 0;
+}
+static void counters_poll(void) {
+  static int armed, line, dumped;
+  static Q last_gw, last_top, last_msg, last_upd, last_fl, last_fi, last_sw, last_cbt, last_code[16];
+  int on = GetFileAttributesW(L"C:\\sm4l-counters-on") != 0xffffffffu;
+  ui_tid = GetCurrentThreadId(); /* the tick runs on the UI thread */
+  walk_cache_on = GetFileAttributesW(L"C:\\sm4l-walkcache-on") != 0xffffffffu;
+  if (!on && !walk_cache_on) {
+    armed = 0;
+    return;
+  }
+  if (!armed) {
+    armed = 1;
+    counters_hook_modules();
+    mods_refresh();
+    hexv("counters armed, hooks=", (Q)n_patched);
+    hexv("modules=", (Q)n_hooked);
+    say("\r\n");
+    last_gw = cnt_getwindow, last_top = cnt_gettop, last_msg = cnt_sendmsg, last_upd = cnt_updatewin;
+    last_fl = cnt_glflush, last_fi = cnt_glfinish, last_sw = cnt_swap, last_cbt = cbt_calls;
+    for (int i = 0; i < 16; i++)
+      last_code[i] = cbt_by_code[i];
+    return;
+  }
+  if (!(++line & 7))
+    counters_hook_modules(); /* modules loaded since the last scan */
+  if (GetFileAttributesW(L"C:\\sm4l-callers-dump") != 0xffffffffu) {
+    if (!dumped) {
+      dumped = 1;
+      mods_refresh();
+      hist_dump("walk(GetWindow+GetTopWindow)", hist_walk);
+      hist_dump("WM_MDIGETACTIVE", hist_mdi);
+      hist_dump("SendMessage(other)", hist_send);
+    }
+  } else {
+    dumped = 0;
+  }
+  if (!on)
+    return; /* the walk cache alone logs nothing */
+  Q dg = cnt_getwindow - last_gw, dt = cnt_gettop - last_top, dm = cnt_sendmsg - last_msg, du = cnt_updatewin - last_upd;
+  Q df = cnt_glflush - last_fl, di = cnt_glfinish - last_fi, ds = cnt_swap - last_sw, dc = cbt_calls - last_cbt;
+  if (!(dg | dt | dm | du | df | di | ds | dc) && (line & 3))
+    return;
+  last_gw = cnt_getwindow, last_top = cnt_gettop, last_msg = cnt_sendmsg, last_upd = cnt_updatewin;
+  last_fl = cnt_glflush, last_fi = cnt_glfinish, last_sw = cnt_swap, last_cbt = cbt_calls;
+  say("cnt ");
+  hexv("GetWindow=", dg);
+  hexv("GetTopWindow=", dt);
+  hexv("SendMessage=", dm);
+  hexv("UpdateWindow=", du);
+  hexv("glFlush=", df);
+  hexv("glFinish=", di);
+  hexv("SwapBuffers=", ds);
+  hexv("CBThook=", dc);
+  hexv("wc_hit=", wc_hit);
+  hexv("wc_miss=", wc_miss);
+  if (dc) {
+    say("cbtcodes:"); /* HCBT_ code and calls since the last line: 0 MOVESIZE, 1 MINMAX, 2 QS, 3 CREATEWND, 4 DESTROYWND, 5 ACTIVATE, 6 CLICKSKIPPED, 7 KEYSKIPPED, 8 SYSCOMMAND, 9 SETFOCUS */
+    for (int i = 0; i < 16; i++)
+      if (cbt_by_code[i] != last_code[i]) {
+        hexv("", (Q)i);
+        hexv("n=", cbt_by_code[i] - last_code[i]);
+        last_code[i] = cbt_by_code[i];
+      }
+  }
+  if (dm) {
+    say("msgs:");
+    for (int top = 0; top < 4; top++) { /* four most frequent IDs since arming, with their totals */
+      int best = -1;
+      for (int i = 0; i < 32; i++)
+        if (msg_id[i] && msg_count[i] && (best < 0 || msg_count[i] > msg_count[best]))
+          best = i;
+      if (best < 0)
+        break;
+      hexv("", msg_id[best] - 1);
+      hexv("n=", msg_count[best]);
+      msg_count[best] = 0;
+    }
+    for (int i = 0; i < 32; i++)
+      msg_count[i] = 0; /* counts are per line */
+  }
+  if (!(line & 3)) {
+    window_total = window_widest = 0;
+    window_pid = GetCurrentProcessId();
+    EnumWindows(window_top, 0);
+    hexv("windows=", window_total);
+    hexv("widest_parent_children=", window_widest);
+  }
+  say("\r\n");
+}
+/* Opt-in (C:\sm4l-batch-on): five ForceRebuild3 calls back to back on the UI thread, timed, once per flag file.
+ * The benchmark from outside returns to the message loop between calls, so every call is followed by an idle pass;
+ * this one runs them without idle passes, which separates idle-time work (MFC idle UI updates) from rebuild cost.
+ * Like the benchmark it can mark the document modified; it changes no dimension and saves nothing. */
+static void batch_poll(void) {
+  static int done;
+  if (GetFileAttributesW(L"C:\\sm4l-batch-on") == 0xffffffffu) {
+    done = 0;
+    return;
+  }
+  if (done || !cad)
+    return;
+  done = 1;
+  VAR doc = {0}, view = {0}, result = {0}, top = {0};
+  H h = view_of(cad, &doc, &view);
+  if (h < 0) {
+    say("batch: no active document\r\n");
+    return;
+  }
+  top.vt = 11;
+  top.val.num = -1;
+  Q all = GetTickCount64();
+  for (int i = 0; i < 5; i++) {
+    Q start = GetTickCount64();
+    h = invoke(doc.val.ptr, L"ForceRebuild3", 1, &top, 1, &result);
+    say("batch rebuild ms: ");
+    milliseconds(GetTickCount64() - start);
+    VariantClear(&result);
+    if (h < 0)
+      break;
+  }
+  say("batch total ms: ");
+  milliseconds(GetTickCount64() - all);
+  VariantClear(&view);
+  VariantClear(&doc);
+}
+#endif
 static void tick(P window, U message, Q id, U time) {
   (void)message;
   (void)id;
   (void)time;
+#ifdef SM4L_UI_ADDIN
+  sampler_poll();
+  counters_poll();
+  batch_poll();
+#endif
   if (busy || !cad)
     return;
   busy = 1;

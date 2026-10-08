@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Connect the existing Linux spacenavd socket to SOLIDWORKS view navigation."""
 import argparse
+import cad_cleanup
 import ctypes as C
 from ctypes.util import find_library
 import fcntl
@@ -176,11 +177,16 @@ def main():
             except BlockingIOError:
                 return 0
             attempts = {}
+            cleaner = cad_cleanup.Cleaner(state)
             while True:
                 # Stay alive: CAD starts from the menu or from the browser (3DEXPERIENCE
                 # launcher) and restarts. Never touch Wine until an instance exists, so
                 # this cannot start a mismatched wineserver. At most 3 tries per instance.
                 time.sleep(2)
+                try:
+                    cleaner.step()  # closes launcher/WebView leftovers some seconds after CAD exits
+                except Exception as error:  # never let housekeeping stop the add-in loader
+                    print('cleanup error:', error, flush=True)
                 cad = settled_cad()
                 if not cad or attempts.get(cad, 0) >= 3:
                     continue
