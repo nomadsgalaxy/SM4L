@@ -65,7 +65,7 @@ Tools and experiments (not yet verified):
 - `relay_trace.py`: a trace helper for the header-layout investigation. Untested.
 - `ensure_theme_off.py`: called by `launch_proton.sh` before each start to keep `ThemeActive=0`. Written and tested on a copy only, not live.
 - Flag-gated diagnostics in `spacemouse-view.c`, all off by default: the in-process sampler (`C:\sm4l-sampler-on`), the call counters with caller histograms, a window-walk cache, and a batch rebuild. Each runs only while its flag file exists. The walk cache measured no rebuild gain.
-- `cad_cleanup.py`: after the last `sldworks.exe` exits, the UI-only bridge closes this prefix's leftover launcher and helper processes. It never touches the service side that browser Open needs, and it skips the cleanup while a sign-in launcher is still young. Kill switch: `state/cleanup-off` or `SM4L_CLEANUP=0`. Log in `state/cleanup.log`. `ENOPLMCSAClient.exe` is deliberately left out of the close list, because the browser Open may need it. Untested live; the test covers it with fake processes.
+- `cad_cleanup.py`: after the last `sldworks.exe` exits, the UI-only bridge closes this prefix's leftover launcher and helper processes. It never touches the service side that browser Open needs, and it skips the cleanup while a sign-in launcher is still young. Kill switch: `state/cleanup-off` or `SM4L_CLEANUP=0`. Log in `state/cleanup.log`. Untested live; the test covers it with fake processes.
 - `padded_border.py`: a diagnostic that sets `PaddedBorderWidth` to 4 px in the prefix. The result was negative: it didn't stop the header drift. Kept only for reference.
 - The header-wipe fix in `spacemouse-view.c`: built and compile-checked, under test in CAD. This commit is a checkpoint, not a fix.
 

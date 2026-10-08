@@ -12,7 +12,8 @@ Run as `cad_cleanup.py --dry-run` to see what it would close right now."""
 import os, re, signal, sys, time
 from pathlib import Path
 
-TARGETS = {'swxdesktoplauncher.exe', 'catstart.exe', 'viewserverv6.exe', 'sldprocmon.exe', 'sldexitapp.exe'}
+LAUNCHERS = {'swxdesktoplauncher.exe', 'enoplmcsaclient.exe'}   # the sign-in client and the launcher it starts
+TARGETS = LAUNCHERS | {'catstart.exe', 'viewserverv6.exe', 'sldprocmon.exe', 'sldexitapp.exe'}
 WEBVIEW = 'msedgewebview2.exe'
 WEBVIEW_OWNERS = ('--webview-exe-name=swxdesktoplauncher.exe', '--webview-exe-name=sldworks.exe')
 CHILDREN_OK = {'conhost.exe', WEBVIEW, 'swcefsubproc.exe'}   # taken only below a target (Linux parent chain)
@@ -77,7 +78,7 @@ def plan(procs, last_exit_age, idle=IDLE, min_age=MIN_AGE):
     chosen = [by_pid[pid] for pid in targets]
     for p in chosen:
         started_after_exit = last_exit_age is None or p['age'] < last_exit_age
-        if p['name'] == 'swxdesktoplauncher.exe' and p['age'] < min_age and started_after_exit:
+        if p['name'] in LAUNCHERS and p['age'] < min_age and started_after_exit:
             return [], 'a launcher started %.0f s ago (sign-in in progress?)' % p['age']
     return chosen, 'nothing to close' if not chosen else ''
 
