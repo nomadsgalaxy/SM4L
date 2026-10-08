@@ -11,6 +11,8 @@ The menu entry also stores an absolute path, so it needs reinstalling as well. `
 
 The live prefix's `Browsers` value currently points at the parent folder, `.../apps/solidworks/open_windows_firefox.sh`, not at the SM4L checkout. Migrating re-registers it either way.
 
+**Status:** the switch-over is done on the reference laptop. `main` was fast-forwarded to the reorganized layout, the units were reinstalled from `bin/`, `bin/register_paths.py` has run, and `setup.sh --plan` reports nothing left to do. The steps below are kept for anyone moving an older checkout.
+
 ## Before you start
 
 - Close CAD. Make sure no `sldworks.exe`, `SWXDesktopLauncher`, `CATSTART` or `ViewServer` process is left running.

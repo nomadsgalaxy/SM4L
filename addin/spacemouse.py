@@ -55,23 +55,36 @@ def publish(path, seq, motion):
         finally:
             temporary.unlink(missing_ok=True)
 
+WINE_LIBS = Path('/usr/lib/wine/x86_64-windows')
+LIBS = ('kernel32', 'ole32', 'oleaut32', 'user32', 'gdi32', 'uxtheme')
+
+def compile_command(source, obj, kind):
+    """The exact clang command for each build. kind: 'exe' (the helper run by the bridges), 'addin' (SpaceMouse add-in
+    DLL) or 'ui-addin' (UI compatibility add-in DLL). tests/test_addin_build.py runs these same commands."""
+    if kind == 'exe':
+        return ['clang', '--target=x86_64-pc-windows-msvc', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-builtin', '-c', str(source), '-o', str(obj)]
+    defines = ['-DSM4L_ADDIN'] + (['-DSM4L_UI_ADDIN'] if kind == 'ui-addin' else [])
+    return ['clang', '--target=x86_64-pc-windows-msvc', *defines, '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-fno-builtin', '-c', str(source), '-o', str(obj)]
+
+def link_command(obj, out, kind):
+    flags = ['/entry:entry', '/subsystem:console'] if kind == 'exe' else ['/dll', '/noentry']
+    return ['lld-link', *flags, '/nodefaultlib', '/machine:x64', '/out:'+str(out), str(obj), *(str(WINE_LIBS/('lib'+n+'.a')) for n in LIBS)]
+
 def build(state, addin=False, ui=False):
     source = Path(__file__).with_name('spacemouse-view.c')
     stem = 'ui-compat' if ui else 'spacemouse-view'
     exe, obj = state/(stem+'.exe'), state/(stem+'.obj')
     if not exe.exists() or exe.stat().st_mtime_ns < source.stat().st_mtime_ns:
-        subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-builtin', '-c', str(source), '-o', str(obj)], check=True)
-        libs = Path('/usr/lib/wine/x86_64-windows')
-        subprocess.run(['lld-link', '/entry:entry', '/subsystem:console', '/nodefaultlib', '/machine:x64', '/out:'+str(exe.with_suffix('.new.exe')), str(obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'gdi32', 'uxtheme'))], check=True)
+        subprocess.run(compile_command(source, obj, 'exe'), check=True)
+        subprocess.run(link_command(obj, exe.with_suffix('.new.exe'), 'exe'), check=True)
         os.replace(exe.with_suffix('.new.exe'), exe)
     if addin:
         dll = state/'prefix/pfx/drive_c'/('sm4l-ui-compat-v2.dll' if ui else 'sm4l-spacemouse-v3.dll')
         if not dll.exists() or dll.stat().st_mtime_ns < source.stat().st_mtime_ns:
             dll_obj = state/(stem+'-addin.obj')
             staged = state/(stem+'-addin.new.dll')
-            subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-DSM4L_ADDIN', *(['-DSM4L_UI_ADDIN'] if ui else []), '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-fno-builtin', '-c', str(source), '-o', str(dll_obj)], check=True)
-            libs = Path('/usr/lib/wine/x86_64-windows')
-            subprocess.run(['lld-link', '/dll', '/noentry', '/nodefaultlib', '/machine:x64', '/out:'+str(staged), str(dll_obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'gdi32', 'uxtheme'))], check=True)
+            subprocess.run(compile_command(source, dll_obj, 'ui-addin' if ui else 'addin'), check=True)
+            subprocess.run(link_command(dll_obj, staged, 'addin'), check=True)
             os.replace(staged, dll)
     return exe
 

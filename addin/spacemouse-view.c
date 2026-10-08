@@ -1491,6 +1491,12 @@ static void sampler_stop_join(void) {
 static Q cnt_getwindow, cnt_gettop, cnt_sendmsg, cnt_updatewin, cnt_glflush, cnt_glfinish, cnt_swap, wc_hit, wc_miss;
 static U ui_tid;
 static int walk_cache_on;
+static Q mfc_base, mdi_hit, mdi_miss; /* WM_MDIGETACTIVE cache: mfc140u's base, hits and misses */
+static int mdicache_on;
+typedef struct {
+  Q key, val, gen, stamp, aux;
+} MdiEntry;
+static MdiEntry mdi_table[16];
 /* Caller histograms: return address of each hooked call, bucketed to 256 bytes. */
 typedef struct {
   Q key, n;
@@ -1612,12 +1618,7 @@ static int hook_UpdateWindow(P w) {
  * per call (first 300 since the flag appeared): window class, handle, whether the call changes nothing (same size and
  * position as now, no z-order change), the window's current x,y,w,h (parent coordinates for child windows), the
  * requested x,y,cx,cy and the flags. Totals go on the cnt lines. */
-static Q swp_base, swp_total, swp_noop, swp_skipped, mfc_base, mdi_hit, mdi_miss;
-static int mdicache_on;
-typedef struct {
-  Q key, val, gen, stamp, aux;
-} MdiEntry;
-static MdiEntry mdi_table[16];
+static Q swp_base, swp_total, swp_noop, swp_skipped;
 static int swp_log_on, swp_logged, swp_dedupe_on;
 #include "swp_dedupe.h"
 static int swp_noop_call(P w, int x, int y, int cx, int cy, U flags, int *r) {
@@ -1900,7 +1901,11 @@ static void counters_poll(void) {
       const char *m = samp_mods[i].name;
       if (m[0] == 's' && m[1] == 'l' && m[2] == 'd' && m[3] == 'a' && m[4] == 'p' && m[5] == 'p' && m[6] == 'u' && !m[7])
         swp_base = samp_mods[i].base;
-      if (!__builtin_memcmp(m, "mfc140u", 8))
+      static const char mfc[] = "mfc140u";
+      int k = 0;
+      while (mfc[k] && m[k] == mfc[k])
+        k++;
+      if (!mfc[k] && !m[k])
         mfc_base = samp_mods[i].base;
     }
     hexv(on || walk_cache_on || swp_log_on ? "counters armed, hooks=" : "swp dedupe armed, hooks=", (Q)n_patched);
