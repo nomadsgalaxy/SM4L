@@ -89,6 +89,19 @@ It should be `0x110`. Step 11 in [INSTALL.md](INSTALL.md) sets it. Stop the pref
 
 After a prefix update or a recreated prefix, run step 14 again. `setup/ensure_theme_off.py` is meant to re-apply the setting before each start, but that's pending a live check.
 
+## The original CATSysTS.dll is missing
+
+**You see:** the directory-compat step reports that the backup `CATSysTS.dll.pre-swcompat` is missing, or a rollback has no file to restore.
+
+**Usual cause:** the backup was never created, or it was moved or deleted. Installs made before `setup/apply_directory_compat.py` existed kept the original elsewhere.
+
+**Do this:** look for the original in both places:
+
+- Next to the platform's `CATSysTS.dll`, as `CATSysTS.dll.pre-swcompat`.
+- Older installs may have it at `$SOLIDWORKS_PROTON_STATE/directory-compat/CATSysTS.original.dll`.
+
+Check the file's SHA256 against the original before you restore it. Don't restore an unknown file.
+
 ## Section headers are missing or wiped
 
 **You see:** PropertyManager headers such as Type, To Fillet, Parameters or Options disappear, especially after a drag or resize.

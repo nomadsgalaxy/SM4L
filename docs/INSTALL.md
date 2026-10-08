@@ -171,6 +171,8 @@ python3 -B "$SM4L_ROOT/setup/apply_directory_compat.py" "$PLATFORM_BIN/CATSysTS.
 
 The watcher waits up to 15 minutes for the exact original bytes to reappear, then patches them again. On the reference machine the dictionary compiler then returned zero, wrote a 190,218-byte dictionary, and the platform install finished.
 
+To roll back this step, restore the original `CATSysTS.dll` from `CATSysTS.dll.pre-swcompat` in the platform `bin` folder, and delete the `swcompat.dll` beside it. Older installs may have the original at `$SOLIDWORKS_PROTON_STATE/directory-compat/CATSysTS.original.dll` instead, from the first manual flow before the apply script existed. Check both places before you change anything.
+
 If you'd rather rebuild the proxy than use the checked-in one, run `setup/build_directory_compat.py` on the `.pre-swcompat` file with an output directory that doesn't exist yet, then pass `--shim` to the apply script. Every guarded patch refuses builds it doesn't know.
 
 ## 8. Install SOLIDWORKS Design CAD
