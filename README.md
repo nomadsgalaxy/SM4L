@@ -15,7 +15,7 @@ Before you dive into this, please note that this is still in "proof of concept" 
 Open issues:
 
 - **Section headers wipe away (fixed).** The PropertyManager headers (Type, To Fillet, Parameters, Options) used to disappear. The header hook in the UI add-in keeps them visible, verified live on 2026-10-08, including through drag, resize and with no flicker. The exact caller that drives the drift is still being traced.
-- **3MF export crashes (open, not fixed).** Save As 3MF crashes CAD. In a traced run, the main thread hits an access violation inside Wine's builtin msxml3.dll, called from the printing module that the 3MF export uses. A native msxml3 override for CAD was tried and failed live, so it is not a fix. The cause is still open.
+- **3MF Save As works with native msxml6 (one live run).** Without the fix, Save As 3MF crashes CAD inside Wine's builtin msxml3. Step 9c sets native msxml6 for CAD only. It was verified once on 2026-10-08, and the file imported into PrusaSlicer. Keep it on the list until it passes again on a retry.
 
 ## Where to start
 

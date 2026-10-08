@@ -310,6 +310,33 @@ cp "$SOLIDWORKS_PROTON_STATE/user.reg.before-theme-off" "$SOLIDWORKS_PROTON_STAT
 
 That restores the whole `user.reg`, so it also undoes any other registry changes made since the backup. If you only want to switch the theme back on, set `ThemeActive` to `1` instead. The original value was `1`, with `DllName` pointing at `light.msstyles`.
 
+## 9c. Use native msxml6 for CAD so 3MF Save As works
+
+Verified live once, on 2026-10-08 at about 14:35: Save As 3MF completed, CAD started cleanly with no popups, and the file imported into PrusaSlicer. Keep this to one run until it has passed again on another retry.
+
+Without this, 3MF Save As crashes CAD. The builtin msxml3 that Wine ships miscounts document references when nodes move between documents, so a later read reaches freed memory. Forcing native msxml6 for `sldworks.exe` avoids that path.
+
+Stop the prefix first. Then back up the registry and the msxml6 files:
+
+```bash
+cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/user.reg" "$SOLIDWORKS_PROTON_STATE/user.reg.before-msxml6"
+cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/system.reg" "$SOLIDWORKS_PROTON_STATE/system.reg.before-msxml6"
+mkdir -p "$SOLIDWORKS_PROTON_STATE/msxml6-backup"
+cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32/msxml6.dll" "$SOLIDWORKS_PROTON_STATE/msxml6-backup/system32-msxml6.dll"
+cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/syswow64/msxml6.dll" "$SOLIDWORKS_PROTON_STATE/msxml6-backup/syswow64-msxml6.dll"
+```
+
+Get Microsoft's MSXML 6.0 package, KB2957482. Winetricks caches it as `msxml6-KB2957482-enu-amd64.exe`. Extract the `.msi` from it with 7z, and then extract the `.msi` to a folder. Copy the x64 `msxml6.dll` and `msxml6r.dll` into `system32`, and the x86 `msxml6.dll` and `msxml6r.dll` into `syswow64`.
+
+Then set the override for CAD only, and stop the prefix again:
+
+```bash
+pwine reg.exe add 'HKCU\Software\Wine\AppDefaults\sldworks.exe\DllOverrides' /v msxml6 /t REG_SZ /d native,builtin /f
+WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
+```
+
+To roll back, close CAD and stop the prefix. Restore the two backed-up `msxml6.dll` files, delete both `msxml6r.dll` files, and remove the `msxml6` value under `AppDefaults\sldworks.exe\DllOverrides`. Restoring the `user.reg` and `system.reg` backups also works.
+
 ## 10. Launch CAD and fix the black viewport
 
 ```bash
