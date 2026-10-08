@@ -12,11 +12,16 @@ So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2
 
 Before you dive into this, please note that this is still in "proof of concept" stage, I just got this working, and haven't tested it with anything more complex than a cube with some chamfers. There's a lot of broken UI that I'm working on fixing.
 
+Open issues:
+
+- **Section headers wipe away.** The PropertyManager headers (Type, To Fillet, Parameters, Options) can disappear when a window opens, moves or resizes. This is under investigation.
+- **3MF export crashes (under investigation).** Save As 3MF crashed CAD. The log ends with Wine msxml parse errors and a `CoMarshalInterface` failure. It may need native msxml6.
+
 ## Where to start
 
 1. [Download the installer from Linux](docs/DOWNLOAD.md). The 3DEXPERIENCE site hides the desktop app from Linux browsers, so this covers the Firefox setup that gets around that.
 2. [Follow the replication guide](docs/REPLICATE.md). It's the exact route I used, with the commands, source hashes, registry settings and rollback steps.
-3. [Read the findings](docs/FINDINGS.md) if you want to know why each fix exists and which experiments I dropped.
+3. [Read the findings](docs/FINDINGS.md) if you want to know why each fix exists. 
 4. [Set up the SpaceMouse](docs/SPACEMOUSE.md) if you have one.
 
 [checkpoint.json](checkpoint.json) records the versions I tested and the evidence behind them.
@@ -51,5 +56,14 @@ I left out vendor payloads, installed prefixes, cookies, launch tickets and cras
 | Firefox scripts | A separate Firefox profile that identifies as Windows, plus routing for login links from the prefix |
 | `patch_header_layout.py` | A version-pinned, prefix-only guard for the null `HDM_LAYOUT` crash |
 | `*_probe.c`, `test_*.py` | Reproductions and checks for each failure and patch |
+
+Tools and experiments (not yet verified):
+
+- `launch_direct.py`: a browser-skip experiment that starts `SWXDesktopLauncher.exe` directly. Untested.
+- `leftovers.sh`: a diagnostic that lists launcher-side processes that outlive their chain. It kills nothing. Untested.
+- `relay_trace.py`: a trace helper for the header-layout investigation. Untested.
+- `ensure_theme_off.py`: called by `launch_proton.sh` before each start to keep `ThemeActive=0`. Written and tested on a copy only, not live.
+- `padded_border.py`: sets `PaddedBorderWidth` to 4 px in the prefix, which may stop the header layout drift. It edits the registry offline and needs no wineserver running. Untested.
+- The header-wipe fix in `spacemouse-view.c`: built and compile-checked, under test in CAD. This commit is a checkpoint, not a fix.
 
 Run the checks at the end of the replication guide before patching anything. Every patch checks the file's hash first. If one refuses, you've got a different build, so stop and look at it. Don't remove the guard.

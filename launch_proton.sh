@@ -38,6 +38,9 @@ fsync=1; esync=1
 if [[ "$PROTON_NO_FSYNC" == 1 ]]; then fsync=0; fi
 if [[ "$PROTON_NO_ESYNC" == 1 ]]; then esync=0; fi
 mkdir -p "$state/prefix/pfx"
+# Classic (unthemed) painting is the fix for the missing checkbox/radio labels; put it back if a Proton
+# or Wine update reset it. Only edits user.reg while no wineserver runs for this prefix.
+python3 -I "$(dirname -- "$(realpath -- "$0")")/ensure_theme_off.py" "$state/prefix/pfx" || true
 # Match UMU's large descriptor budget for the shared server.
 ulimit -n "$(ulimit -Hn)"
 WINEPREFIX="$state/prefix/pfx" WINEFSYNC="$fsync" WINEESYNC="$esync" "$server" -p 9>&- || { status=$?; [[ "$status" == 2 ]] || exit "$status"; }

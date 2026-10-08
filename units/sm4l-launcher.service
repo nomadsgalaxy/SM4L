@@ -1,0 +1,12 @@
+[Unit]
+Description=SM4L 3DEXPERIENCE Launcher (boots the prefix for the browser's Open button)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/AI/System/Work-Laptop/apps/solidworks/SM4L/launch_service.sh
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=graphical-session.target

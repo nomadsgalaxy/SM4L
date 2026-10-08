@@ -1,0 +1,13 @@
+[Unit]
+Description=SM4L UI compatibility add-in loader
+After=spacenavd.service
+
+[Service]
+ExecStart=/usr/bin/python3 -B %h/AI/System/Work-Laptop/apps/solidworks/SM4L/spacemouse.py --ui-only
+Restart=on-failure
+RestartSec=30
+# exit 2 = another bridge already holds the prefix lock
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=default.target

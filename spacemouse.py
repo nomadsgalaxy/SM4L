@@ -61,7 +61,7 @@ def build(state, addin=False, ui=False):
     if not exe.exists() or exe.stat().st_mtime_ns < source.stat().st_mtime_ns:
         subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-O2', '-Wall', '-Wextra', '-Werror', '-fno-builtin', '-c', str(source), '-o', str(obj)], check=True)
         libs = Path('/usr/lib/wine/x86_64-windows')
-        subprocess.run(['lld-link', '/entry:entry', '/subsystem:console', '/nodefaultlib', '/machine:x64', '/out:'+str(exe.with_suffix('.new.exe')), str(obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'uxtheme'))], check=True)
+        subprocess.run(['lld-link', '/entry:entry', '/subsystem:console', '/nodefaultlib', '/machine:x64', '/out:'+str(exe.with_suffix('.new.exe')), str(obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'gdi32', 'uxtheme'))], check=True)
         os.replace(exe.with_suffix('.new.exe'), exe)
     if addin:
         dll = state/'prefix/pfx/drive_c'/('sm4l-ui-compat-v2.dll' if ui else 'sm4l-spacemouse-v3.dll')
@@ -70,7 +70,7 @@ def build(state, addin=False, ui=False):
             staged = state/(stem+'-addin.new.dll')
             subprocess.run(['clang', '--target=x86_64-pc-windows-msvc', '-DSM4L_ADDIN', *(['-DSM4L_UI_ADDIN'] if ui else []), '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-fno-builtin', '-c', str(source), '-o', str(dll_obj)], check=True)
             libs = Path('/usr/lib/wine/x86_64-windows')
-            subprocess.run(['lld-link', '/dll', '/noentry', '/nodefaultlib', '/machine:x64', '/out:'+str(staged), str(dll_obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'uxtheme'))], check=True)
+            subprocess.run(['lld-link', '/dll', '/noentry', '/nodefaultlib', '/machine:x64', '/out:'+str(staged), str(dll_obj), *(str(libs/('lib'+n+'.a')) for n in ('kernel32', 'ole32', 'oleaut32', 'user32', 'gdi32', 'uxtheme'))], check=True)
             os.replace(staged, dll)
     return exe
 
@@ -85,6 +85,59 @@ def register(wine, env, ui=False):
                (addin, 'Description', 'REG_SZ', 'Restore radio and checkbox labels' if ui else 'Linux SpaceMouse view navigation')]
     for key, name, kind, value in entries:
         subprocess.run([wine, 'reg.exe', 'add', key, *(['/v', name] if name else ['/ve']), '/t', kind, '/d', value, '/f'], env=env, check=True, stdout=subprocess.DEVNULL)
+    disarm(wine, env)
+
+def session_display():
+    """DISPLAY/XAUTHORITY of the live session (XAUTHORITY changes whenever KWin restarts)."""
+    env = dict(os.environ)
+    out = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        key, _, value = line.partition('=')
+        if key in ('DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY'):
+            env[key] = value
+    return env
+
+def frame_visible(pid, env):
+    """True when the CAD process owns a large visible X window (the main frame, not the splash)."""
+    out = subprocess.run(['xdotool', 'search', '--onlyvisible', '--pid', pid], capture_output=True, text=True, env=env).stdout.split()
+    for win in out:
+        geometry = subprocess.run(['xdotool', 'getwindowgeometry', '--shell', win], capture_output=True, text=True, env=env).stdout
+        size = dict(line.split('=', 1) for line in geometry.splitlines() if '=' in line)
+        if int(size.get('WIDTH', 0) or 0) >= 640 and int(size.get('HEIGHT', 0) or 0) >= 480:
+            return True
+    return False
+
+_frame_seen = {}
+
+def settled_cad(seconds=15, fallback=90, stable=3):
+    """Oldest sldworks.exe pid once it is safe to LoadAddIn into it: at least `seconds` old and its
+    main frame visible on X for `stable` scans in a row. Without a usable xdotool/display (or if no
+    frame ever shows), fall back to a plain age of `fallback` seconds."""
+    pid = subprocess.run(['pgrep', '-xo', 'sldworks.exe'], capture_output=True, text=True).stdout.strip()
+    if not pid:
+        _frame_seen.clear()
+        return ''
+    age = subprocess.run(['ps', '-o', 'etimes=', '-p', pid], capture_output=True, text=True).stdout.strip()
+    if not age.isdigit() or int(age) < seconds:
+        return ''
+    if int(age) >= fallback:
+        return pid
+    try:
+        seen = _frame_seen[pid] = _frame_seen.get(pid, 0)+1 if frame_visible(pid, session_display()) else 0
+    except (OSError, ValueError):
+        return ''
+    return pid if seen >= stable else ''
+
+SM4L_ADDINS = ('{BB75177C-6799-4F57-9B75-10931D6421F6}', '{BB75177C-6799-4F57-9B75-10931D6421FA}')
+
+def disarm(wine, env, ui=False):
+    """Keep CAD from loading our add-ins by itself at startup.
+    CAD flips the default value to 1 when it exits with an add-in loaded, and an exit by crash
+    skips our post-exit reset. It reads the per-user HKCU AddInsStartup value at startup (HKLM Addins
+    is the add-in list), so reset both hives for both add-ins, before every load and after exit."""
+    for guid in SM4L_ADDINS:
+        for key in ('HKLM\\Software\\SolidWorks\\Addins\\'+guid, 'HKCU\\Software\\SolidWorks\\AddInsStartup\\'+guid):
+            subprocess.run([wine, 'reg.exe', 'add', key, '/ve', '/t', 'REG_DWORD', '/d', '0', '/f'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -122,8 +175,21 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 return 0
-            register(command[0], env, ui=True)
-            return subprocess.call(command+['--load-ui-addin'], env=env)
+            attempts = {}
+            while True:
+                # Stay alive: CAD starts from the menu or from the browser (3DEXPERIENCE
+                # launcher) and restarts. Never touch Wine until an instance exists, so
+                # this cannot start a mismatched wineserver. At most 3 tries per instance.
+                time.sleep(2)
+                cad = settled_cad()
+                if not cad or attempts.get(cad, 0) >= 3:
+                    continue
+                attempts[cad] = attempts.get(cad, 0)+1
+                register(command[0], env, ui=True)
+                try:
+                    subprocess.call(command+['--load-ui-addin'], env=env)
+                finally:
+                    disarm(command[0], env, ui=True)
     lib = C.CDLL(find_library('spnav') or 'libspnav.so.0')
     lib.spnav_poll_event.argtypes = [C.POINTER(Event)]
     lib.spnav_dev_name.argtypes = [C.c_char_p, C.c_int]
@@ -142,9 +208,9 @@ def main():
             print('Waiting for a SpaceMouse device to connect.', flush=True)
         if not args.listen:
             path.unlink(missing_ok=True)
-            register(command[0], env)
-            child = subprocess.Popen(command+['--load-addin'], env=env)
         event = Event()
+        next_scan = time.monotonic()+2
+        attempts = {}
         start = previous = last_motion = time.monotonic()
         next_frame = start
         axes = [0]*6
@@ -152,7 +218,18 @@ def main():
         seq = count = 0
         while not args.seconds or time.monotonic()-start < args.seconds:
             if child and child.poll() is not None:
-                return child.returncode
+                # CAD exited (or hands off to the 3DEXPERIENCE launcher and restarts):
+                # stay alive and attach to the next instance instead of ending the bridge.
+                child = None
+                path.unlink(missing_ok=True)
+                disarm(command[0], env)
+            if not args.listen and not child and time.monotonic() >= next_scan:
+                next_scan = time.monotonic()+2
+                cad = settled_cad()
+                if cad and attempts.get(cad, 0) < 3:
+                    attempts[cad] = attempts.get(cad, 0)+1
+                    register(command[0], env)
+                    child = subprocess.Popen(command+['--load-addin'], env=env)
             select.select([lib.spnav_fd()], [], [], max(0, next_frame-time.monotonic()))
             while lib.spnav_poll_event(C.byref(event)):
                 if event.type == 1:
@@ -191,6 +268,7 @@ def main():
         lock.close()
         if child:
             path.unlink(missing_ok=True)
+            disarm(command[0], env)
 
 if __name__ == '__main__':
     try:

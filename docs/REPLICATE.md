@@ -282,6 +282,34 @@ The supported Wine DLL hash is `d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056
 
 A prefix refresh can copy the original back. If startup crashes again, compare the current DLL with the backup and only rerun the guard on the matching original. Running it on an already-patched file is refused on purpose.
 
+## 9b. Use classic controls so the checkbox and radio labels draw
+
+With the prefix's Windows theme on, SOLIDWORKS' PropertyManager checkboxes and radio buttons draw without their labels. Turning the theme off makes SOLIDWORKS use classic controls, and the labels render. The cost is a flatter, classic look, which is an acceptable trade for this setup.
+
+Close CAD and stop the prefix first. Then back up the prefix's registry and set the theme value:
+
+```bash
+cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/user.reg" "$SOLIDWORKS_PROTON_STATE/user.reg.before-theme-off"
+pwine reg.exe add 'HKCU\Software\Microsoft\Windows\CurrentVersion\ThemeManager' /v ThemeActive /t REG_SZ /d 0 /f
+WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
+```
+
+Stop the prefix after the `reg add`. `pwine` starts its own wineserver, which writes `user.reg` when it exits. The `wineserver -k` line makes sure that write happens before the next launch.
+
+Start CAD as usual. You don't need the UI-compat helper for the labels.
+
+Proton doesn't rewrite this value on a normal start. A prefix update or a recreated prefix resets it, so run this step again after either one.
+
+**Pending a live test:** `ensure_theme_off.py` is called by `launch_proton.sh` before every start, and re-applies `ThemeActive=0` automatically. That covers a prefix update too. It is written and tested on a copy only, and it isn't committed yet. Until it's tested live, treat re-running this step as the fallback.
+
+To roll back, close CAD, stop the prefix and restore the backup:
+
+```bash
+cp "$SOLIDWORKS_PROTON_STATE/user.reg.before-theme-off" "$SOLIDWORKS_PROTON_STATE/prefix/pfx/user.reg"
+```
+
+That restores the whole `user.reg`, so it also undoes any other registry changes made since the backup. If you only want to switch the theme back on, set `ThemeActive` to `1` instead. The original value was `1`, with `DllName` pointing at `light.msstyles`.
+
 ## 10. Launch CAD and fix the black viewport
 
 ```bash
@@ -355,7 +383,7 @@ Keep runtime logs and dumps local, since they can contain credentials or launch 
 
 ## UI compatibility helper
 
-The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. It restores checkbox/radio labels through the classic painter and brings fully off-screen owned dialogs back over the owner's window. See [the findings](FINDINGS.md) for what was verified and what remains.
+The menu launcher also starts the UI helper after the host Wine server. It builds our own add-in with the same clang/lld and Wine import libraries used for SpaceMouse support, but does not need a SpaceMouse or spacenavd. Checkbox and radio labels now come from step 9b, so the helper no longer un-themes controls. It brings fully off-screen owned dialogs back over the owner's window. The section-header wipe is still open.
 
 For an already running CAD session:
 

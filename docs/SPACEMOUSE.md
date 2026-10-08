@@ -33,7 +33,7 @@ python3 -B spacemouse.py
 
 The helper compiles `spacemouse-view.c` into a loader and my own native COM add-in, using the installed clang/lld and Wine import libraries. It registers the add-in inside the dedicated Wine prefix only, then loads it through SOLIDWORKS' `LoadAddIn` API. A timer on CAD's UI thread reads the newest packet and moves the active document's view. Input is ignored when another app has focus, and the host reader exits when CAD closes. It never creates documents or touches geometry. Ctrl-C stops a manual bridge. Only one bridge runs per prefix.
 
-The menu launcher turns this on automatically after starting the host Wine server. The bridge waits up to three minutes for CAD to come up, and logs to that launch's `logs/run-*/spacemouse.log` in the state directory. Set `SM4L_SPACEMOUSE=0` when launching if you don't want it.
+The menu launcher turns this on automatically after starting the host Wine server. The bridge waits up to 15 minutes for CAD to come up, which covers the browser sign-in and Open hand-off, and logs to that launch's `logs/run-*/spacemouse.log` in the state directory. Set `SM4L_SPACEMOUSE=0` when launching if you don't want it.
 
 Current defaults:
 
@@ -61,6 +61,8 @@ The menu launcher also reads sensitivity from environment variables: `SM4L_SPACE
 ## Add-in registration and updates
 
 The current DLL is `C:\sm4l-spacemouse-v3.dll`, COM class `{BB75177C-6799-4F57-9B75-10931D6421F6}`. The reader writes the class path and `ThreadingModel=Apartment` under `HKLM\Software\Classes\CLSID`, and the title and description under `HKLM\Software\SolidWorks\Addins`. Those are prefix registry entries, not anything on your Linux system. It loads through the supported API and accepts either success or already-loaded. No vendor DLLs are modified for this.
+
+SOLIDWORKS reads the startup switch from `HKCU\Software\SolidWorks\AddInsStartup\{clsid}`. When CAD exits with the add-in loaded, it sets that value to `1`, and the next start loads the add-in before the frame exists. `spacemouse.py` resets that value and the `HKLM` registration to `0` before every load and after the loader exits. The bridge runs from a user unit (`units/sm4l-spacemouse.service`) and attaches to each new `sldworks.exe` once it has been running for 60 seconds, so CAD started from the browser Open gets it too. The add-in waits for a stable, visible CAD frame before arming its timer.
 
 I checked the `ISwAddin` interface ID and its IUnknown-based ABI against the installed `swpublished.tlb`. Registering the class under HKCU only gave a misleading "loaded" result without the connection callback. HKLM registration fixed that. CAD also hangs on to old DLL code after an add-in is unloaded, so the timer and redraw builds each got a new DLL and class identity, which let me keep my unsaved test part open. Restart CAD after updating the add-in. Swapping a loaded DLL doesn't mean the new code is running.
 
