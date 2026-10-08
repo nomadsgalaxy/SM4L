@@ -13,7 +13,7 @@ SECTION = '[Control Panel\\\\Desktop\\\\WindowMetrics]'
 KEY = '"PaddedBorderWidth"='
 
 def load_guard():
-    spec = importlib.util.spec_from_file_location('theme_guard', Path(__file__).with_name('ensure_theme_off.py'))
+    spec = importlib.util.spec_from_file_location('theme_guard', Path(__file__).resolve().parents[1]/'setup'/'ensure_theme_off.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
 

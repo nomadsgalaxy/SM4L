@@ -1,10 +1,11 @@
 """Check launch isolation and argument handling without downloading or running Proton."""
+import _paths
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 
-launcher = Path(__file__).with_name('launch_proton.sh').resolve()
+launcher = (_paths.ROOT/'bin'/'launch_proton.sh').resolve()
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     fake = root / 'umu'
@@ -86,7 +87,7 @@ with tempfile.TemporaryDirectory() as tmp:
         time.sleep(.01)
     bridge = json.loads(capture.with_suffix('.bridge').read_text())
     assert bridge['server_started']
-    assert bridge['args'] == ['python3', '-B', str(launcher.with_name('spacemouse.py'))]
+    assert bridge['args'] == ['python3', '-B', str(_paths.ROOT/'addin'/'spacemouse.py')]
     env.update(SM4L_SPACEMOUSE='0', SM4L_UI_COMPAT='1')
     capture.with_suffix('.bridge').unlink()
     subprocess.run([wrapper], env=env, check=True)
@@ -95,7 +96,7 @@ with tempfile.TemporaryDirectory() as tmp:
         time.sleep(.01)
     ui = json.loads(capture.with_suffix('.bridge').read_text())
     assert ui['server_started']
-    assert ui['args'] == ['python3', '-B', str(launcher.with_name('spacemouse.py')), '--ui-only']
+    assert ui['args'] == ['python3', '-B', str(_paths.ROOT/'addin'/'spacemouse.py'), '--ui-only']
     data = root/'menu with spaces'
     env['XDG_DATA_HOME'] = str(data)
     subprocess.run(['python3', str(launcher.with_name('install_desktop.py'))], env=env, check=True)

@@ -1,6 +1,6 @@
 # What it took to get the laptop working
 
-These are the fixes from October 6–7, 2026 that held. The commands and final settings are collected in [REPLICATE.md](REPLICATE.md). Before this, I spent some time on native geometry experiments, but none of that was used to actually run SOLIDWORKS, so it's not in SM4L.
+These are the fixes from October 6–7, 2026 that held. The commands and final settings are collected in [INSTALL.md](INSTALL.md). Before this, I spent some time on native geometry experiments, but none of that was used to actually run SOLIDWORKS, so it's not in SM4L.
 
 ## Fixes that stuck
 

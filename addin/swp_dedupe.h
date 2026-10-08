@@ -1,6 +1,6 @@
 #ifndef SM4L_SWP_DEDUPE_H
 #define SM4L_SWP_DEDUPE_H
-/* Decision logic of the SetWindowPos dedupe in spacemouse-view.c, kept free of Windows calls so test_swp_dedupe.c can
+/* Decision logic of the SetWindowPos dedupe in spacemouse-view.c, kept free of Windows calls so tests/test_swp_dedupe.c can
  * check it on the host. SOLIDWORKS's rebuild repositions the status bar's progress bar about 120 times per rebuild to
  * the rectangle it already has; skipping exactly those calls made rebuilds about 24% faster. */
 

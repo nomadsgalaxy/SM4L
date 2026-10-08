@@ -1,5 +1,6 @@
 """Check the msxml6 override edit, and install/rollback in a throwaway prefix (needs 7z and the KB2957482 package).
 Usage: test_install_msxml6.py [PACKAGE]   (default: the winetricks cache; the install part is skipped if it is missing)"""
+import _paths
 import os, sys, tempfile
 from pathlib import Path
 import install_msxml6 as m

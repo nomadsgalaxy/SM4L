@@ -1,10 +1,11 @@
+# Template: bin/install_units.sh replaces @SM4L_ROOT@ with this checkout's path and installs it as a systemd user unit.
 [Unit]
 Description=SM4L 3DEXPERIENCE Launcher (boots the prefix for the browser's Open button)
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=%h/AI/System/Work-Laptop/apps/solidworks/SM4L/launch_service.sh
+ExecStart="@SM4L_ROOT@/bin/launch_service.sh"
 Restart=on-failure
 RestartSec=60
 

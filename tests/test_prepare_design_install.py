@@ -1,3 +1,4 @@
+import _paths
 import stat
 import tempfile
 from pathlib import Path

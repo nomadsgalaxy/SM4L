@@ -18,7 +18,7 @@ sudo systemctl enable --now spacenavd
 From the SM4L checkout, with the same prefix and Proton environment as the replication guide:
 
 ```bash
-python3 -B spacemouse.py --listen --seconds 10
+python3 -B addin/spacemouse.py --listen --seconds 10
 ```
 
 Move the cap while this runs. It should find the SpaceMouse and print six-axis packets. `--listen` also prints button numbers, which will help when buttons get mapped. If the daemon logs `No such device` and drops it, check the USB cable and plug it back in. That happened to me once, and reconnecting fixed it.
@@ -28,7 +28,7 @@ Move the cap while this runs. It should find the SpaceMouse and print six-axis p
 With SOLIDWORKS running, open a part and keep its window focused:
 
 ```bash
-python3 -B spacemouse.py
+python3 -B addin/spacemouse.py
 ```
 
 The helper compiles `spacemouse-view.c` into a loader and my own native COM add-in, using the installed clang/lld and Wine import libraries. It registers the add-in inside the dedicated Wine prefix only, then loads it through SOLIDWORKS' `LoadAddIn` API. A timer on CAD's UI thread reads the newest packet and moves the active document's view. Input is ignored when another app has focus, and the host reader exits when CAD closes. It never creates documents or touches geometry. Ctrl-C stops a manual bridge. Only one bridge runs per prefix.
@@ -51,7 +51,7 @@ The reader combines the latest input into updates at up to 30 Hz. Smoothing stop
 To try different speeds manually:
 
 ```bash
-python3 -B spacemouse.py --pan .000015 --rotation .0003 --zoom .0002 --smoothing .05 --invert rz
+python3 -B addin/spacemouse.py --pan .000015 --rotation .0003 --zoom .0002 --smoothing .05 --invert rz
 ```
 
 Stop any running manual bridge first. `--seconds` sets an optional test length. Leave it off for normal use. My first timed test ran out while I was still using it, which made it look like input just stopped.
@@ -71,8 +71,8 @@ To remove it, set `SM4L_SPACEMOUSE=0` for launches, stop the reader, and disable
 ## Checks
 
 ```bash
-python3 -B test_spacemouse.py
-python3 -B spacemouse.py --check-view
+python3 -B tests/test_spacemouse.py
+python3 -B addin/spacemouse.py --check-view
 ```
 
 The first check doesn't need the device. It covers axis mapping, bounds, smoothing, the immediate stop on release, and the packet format. The second needs an open part. It nudges the view, undoes it, and checks the zoom scale really changed. It doesn't save the part.

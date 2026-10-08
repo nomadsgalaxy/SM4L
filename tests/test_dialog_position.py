@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Exercise the native dialog placement calculation without running CAD."""
+import _paths
 from pathlib import Path
 import subprocess
 import tempfile
 
-source = Path(__file__).with_name('spacemouse-view.c').read_text()
+source = (_paths.ROOT/'addin'/'spacemouse-view.c').read_text()
 start = source.index('static void center_owned_rect(')
 end = source.index('static int fix_window(', start)
 with tempfile.TemporaryDirectory() as directory:

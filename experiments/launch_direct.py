@@ -57,7 +57,7 @@ def main():
             print(f'{a.split("=", 1)[0] if a.startswith("-") else "<value>"} ({len(a)} chars)')
         return 0
     exe = state/'prefix/pfx/drive_c'/Path(*LAUNCHER[3:].split('\\'))
-    launch = Path(__file__).with_name('launch_proton.sh')
+    launch = Path(__file__).resolve().parents[1]/'bin'/'launch_proton.sh'
     here = dict(os.environ, SOLIDWORKS_PROTON_STATE=str(state), SM4L_SPACEMOUSE='0', SM4L_UI_COMPAT='0')
     here.setdefault('PROTONPATH', str(Path(wine).parents[2]))
     return subprocess.call([str(launch), str(exe), *launch_args], env=here)

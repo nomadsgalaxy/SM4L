@@ -6,87 +6,101 @@ They still require you to have an internet connection, but right now, it's the l
 
 The biggest challenge was getting the license from the 3DEXPERIENCE portal to pass through. SOLIDWORKS is AGGRESSIVE with hiding the install/open button for the app in 3DEXPERIENCE if you aren't running Windows, and telling your browser to spoof Windows with a user-agent doesn't work. I had to set up a separate Firefox profile that reports Windows everywhere the site checks before the option would show up, and even then, I had to make sure the Windows service it all relies on was able to communicate with the portal.
 
-So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on my Arch Linux x86_64 laptop through UMU and Proton. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
+So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on one Arch Linux x86_64 laptop through UMU and Proton. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
+
+## What this is
+
+SM4L is a set of scripts, a small add-in and the written steps to run SOLIDWORKS on Arch Linux, using UMU and a pinned Proton. It isn't an installer. You bring the vendor media and your own license, and the guide walks you through the rest.
+
+## Disclaimer
+
+SM4L is not affiliated with, endorsed by, or supported by Dassault Systèmes, SOLIDWORKS, Microsoft, Valve or Open Wine Components. You need your own SOLIDWORKS license and the vendor media. SM4L contains neither. The repository has no vendor binaries. The patches change only your own Wine prefix and your own installed copy, and they never change the original media.
+
+## Tested on
+
+- Arch Linux x86_64, KDE Plasma on Wayland (KWin).
+- An Intel GPU (`Mesa Intel(R) Graphics (MTL)`).
+- UMU 1.4.4 with UMU-Proton-10.0-4.
+- SOLIDWORKS Design 2026 SP3.0, from the 3DEXPERIENCE SOLIDWORKS platform media.
+- A wired 3Dconnexion SpaceMouse Pro, optional.
+
+Nobody has replayed the setup on a second machine yet.
+
+## Quick start
+
+1. Get the vendor media. [DOWNLOAD.md](docs/DOWNLOAD.md) explains the Windows-identifying Firefox profile and how to find the full download. Your account needs the desktop app assigned.
+2. Install the host tools and clone this repository, following [INSTALL.md](docs/INSTALL.md), steps 2 and 3.
+3. Follow [INSTALL.md](docs/INSTALL.md) from step 4 to step 11. It covers UMU, the prefix, .NET, the platform, CAD, WebView2, the login profile and the launcher service.
+4. Finish the fixes in steps 12 to 15: the background units, the header guard, the theme setting and native msxml6.
+5. Launch CAD with the menu entry from step 17, then verify with step 18.
+
+`./setup.sh --plan` shows which steps are done and which are left, and changes nothing. `./setup.sh` runs the scriptable steps in order and stops at the manual ones. The script is pending a live test, so follow [INSTALL.md](docs/INSTALL.md) if they disagree.
+
+If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before you try anything else.
 
 ## Status
-
-This is early work on one machine: an Arch Linux x86_64 laptop with an Intel GPU. Nobody has replayed the guide on a fresh machine yet. Treat it as a working reference and check each step as you go.
 
 **Verified on the reference machine**
 
 - Installing, signing in through the 3DEXPERIENCE platform, and launching CAD from the browser's Open button and from the menu entry.
 - Sketching, extruding, chamfering and rotating a model.
 - SpaceMouse navigation, with the view following the cap.
-- Checkbox and radio labels in the PropertyManager, once the theme is off ([step 9b](docs/REPLICATE.md#9b-use-classic-controls-so-the-checkbox-and-radio-labels-draw)).
-- PropertyManager section headers, including through drag and resize. The header hook is in the UI add-in.
-- Save As 3MF, verified once ([step 9c](docs/REPLICATE.md#9c-use-native-msxml6-for-cad-so-3mf-save-as-works)). The file imported into PrusaSlicer.
+- Checkbox and radio labels in the PropertyManager, with the theme off.
+- PropertyManager section headers, including through drag and resize.
+- Save As 3MF, verified once. The file imported into PrusaSlicer.
 
 **Pending confirmation**
 
 - The status-bar `SetWindowPos` dedupe is on by default. It was measured in an A/B run, but not yet after a restart in normal mode.
 - The leftover-process cleanup is enabled. It hasn't yet acted on a real CAD exit.
-- `ensure_theme_off.py` re-applies the theme setting before each start. It isn't confirmed in a real start yet.
+- The theme setting is re-applied before each start by `setup/ensure_theme_off.py`. That isn't confirmed in a real start yet.
 - Saving a `.SLDPRT` and reopening it.
 
-**Open**
+## Known issues
 
-- Embedded browser panels still flash.
-- Model rebuilds are slow. In measured runs, most of the time goes to Wine window-system calls.
-- The exact caller behind the header drift, and the owner of a managed hook that the A/B found, aren't identified yet.
-- CAD has hung on exit once, with the cause unknown.
-- The 3MF fix is verified in one run, and the upstream Wine bug report hasn't been filed yet.
-- Native KDE file chooser integration isn't done.
-
-The working setup is described in [the replication guide](docs/REPLICATE.md). The versions and evidence behind it are in [checkpoint.json](checkpoint.json).
+| Issue | Status | Workaround |
+| --- | --- | --- |
+| Embedded browser panels flash | Open | None yet. CAD still works while the panels flash |
+| Model rebuilds are slow | Open | In measured runs, most of the time goes to Wine window-system calls |
+| The cause of the header drift isn't identified | Open | The header hook in the UI add-in keeps the headers visible |
+| CAD has hung on exit once | Open | The cleanup in `addin/cad_cleanup.py` handles the stuck process. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
+| Save As 3MF needs native msxml6 | Verified once | Step 15 in [INSTALL.md](docs/INSTALL.md) |
+| Labels need the theme off | Verified | Step 14. The look is classic and flatter |
+| Native KDE file chooser isn't integrated | Open | Use the normal file dialogs |
+| Fresh-machine replay not done | Open | Check each step's result as you go |
 
 ## Where to start
 
-1. [Download the installer from Linux](docs/DOWNLOAD.md). The 3DEXPERIENCE site hides the desktop app from Linux browsers, so this covers the Firefox setup that gets around that.
-2. [Follow the replication guide](docs/REPLICATE.md). It's the route that works on the reference machine, with the commands, source hashes, registry settings and rollback steps.
-3. [Read the findings](docs/FINDINGS.md) if you want to know why each fix exists.
-4. [Set up the SpaceMouse](docs/SPACEMOUSE.md) if you have one.
+1. [Download the installer from Linux](docs/DOWNLOAD.md).
+2. [Install SOLIDWORKS on Arch Linux](docs/INSTALL.md). This is the full path, in order.
+3. [Troubleshoot](docs/TROUBLESHOOTING.md) when a step fails.
+4. [Set up the SpaceMouse](docs/SPACEMOUSE.md), if you have one.
+5. [Read the findings](docs/FINDINGS.md) for why each fix exists.
+
+Moving from the earlier layout? See [MIGRATION.md](docs/MIGRATION.md).
 
 ## What you need to bring
 
-The repo has my compatibility code and my own `swcompat.dll` proxy. Everything else comes from the original source: the SOLIDWORKS media, the Microsoft prerequisites and Proton. You need your own Makers account and its assigned license.
+The repository has the compatibility code and its own `swcompat.dll` proxy. Everything else comes from the original source: the SOLIDWORKS media, the Microsoft prerequisites and Proton. You need your own account and its assigned license.
 
-I left out vendor payloads, installed prefixes, cookies, launch tickets and crash dumps on purpose.
+The repository leaves out vendor payloads, installed prefixes, cookies, launch tickets and crash dumps on purpose.
 
-## What's in here
+## Layout
 
-| Files | What they do |
+| Path | What it holds |
 | --- | --- |
-| `launch_solidworks.sh`, `install_desktop.py` | Adds a SOLIDWORKS entry to your app menu |
-| `spacemouse.py`, `spacemouse-view.c` | Connects a Linux SpaceMouse to the focused SOLIDWORKS view |
-| `launch_proton.sh` | Runs everything in a dedicated prefix with fsync/esync off, a host Wine server and a bigger file-descriptor budget |
-| `patch_offline_installer.py` | Makes a checked copy of the installer that skips a false IE10 prerequisite check |
-| `rtl_name_match.c`, `swcompat.dll`, directory-compat scripts | Supplies the Unicode/DOS wildcard matcher the vendor dictionary compiler expects |
-| `prepare_design_install.py`, `cad-msi-experiment.c` | Extracts Spatial InterOp properly and runs the exact CAD MSI install I used |
-| Firefox scripts | A separate Firefox profile that identifies as Windows, plus routing for login links from the prefix |
-| `patch_header_layout.py` | A version-pinned, prefix-only guard for the null `HDM_LAYOUT` crash |
-| `launch_service.sh`, `units/*.service` | Boots the launcher tray at login, and runs the SpaceMouse and UI-compat bridges as user units |
-| `cad_cleanup.py` | After CAD exits, closes this prefix's leftover launcher and helper processes, with launch-chain protection |
-| `install_msxml6.py` | Installs the native msxml6 override for CAD only, with hash checks and rollback |
-| `ensure_theme_off.py` | Keeps the prefix's theme setting off before each start (step 9b) |
-| `*_probe.c`, `test_*.py` | Reproductions and checks for each failure and patch |
-| `install_msxml6.py`, `test_install_msxml6.py` | Installs the native msxml6 override for CAD only (REPLICATE step 9c), with hash checks and rollback |
+| `bin/` | Scripts you run every day: launch, the launcher service, the menu entry, the login profile, the unit installer |
+| `setup/` | One-time install and patch steps, the DLL proxy and its source |
+| `addin/` | The SpaceMouse and UI add-in source, the bridge, the dedupe rules and the leftover-process cleanup |
+| `units/` | systemd user unit templates |
+| `tests/` | Assert-based checks for the scripts above |
+| `experiments/` | Unverified or diagnostic tools, and native probes. Don't run these as part of the install |
+| `docs/` | The guides, the findings record and `tested-versions.json` |
 
-Tools and experiments (not yet verified):
-
-- `launch_direct.py`: a browser-skip experiment that starts `SWXDesktopLauncher.exe` directly. Untested.
-- `leftovers.sh`: a diagnostic that lists launcher-side processes that outlive their chain. It kills nothing. Untested.
-- `relay_trace.py`: a trace helper for the header-layout investigation. Untested.
-- `ensure_theme_off.py`: called by `launch_proton.sh` before each start to keep `ThemeActive=0`. Written and tested on a copy only, not live.
-- Flag-gated diagnostics in `spacemouse-view.c`, all off by default: the in-process sampler (`C:\sm4l-sampler-on`), call counters with caller histograms, a window-walk cache, an MDI-active cache (`C:\sm4l-mdicache-on`), a `SetWindowPos` log, a module map dump, an unhook experiment, and a batch rebuild. Each runs only while its flag file exists. These are flag-gated experiments; the walk cache gave no rebuild gain.
-- The status-bar `SetWindowPos` dedupe in `spacemouse-view.c` is default-on; live verification pending (next restart). The skip logic was measured live in the A/B, but default-on arming in normal mode is not yet verified in CAD. It skips repeated no-op moves of the progress bar. Off switch: `C:\sm4l-swp-dedupe-off`. Rules are in `swp_dedupe.h`, with host-side checks in `test_swp_dedupe.py`. In one CAD session, a 2-feature rebuild went from a 127 ms median to 96 ms with it on.
-- `cad_cleanup.py`: after the last `sldworks.exe` exits, the UI-only bridge closes this prefix's leftover launcher and helper processes. Nothing younger than 180 seconds is closed, and nothing at all is closed while a launch chain process (`CATSTART.exe`, `ENOPLMCSAClient.exe`, or `SWXDesktopLauncher.exe`) is that young. It never touches the service side that browser Open needs. A hung `sldworks.exe` gets SIGTERM, then SIGKILL, and only this prefix's orphaned Wine programs are cleaned up. Kill switch: `state/cleanup-off` or `SM4L_CLEANUP=0`. Log in `state/cleanup.log`. Enabled. Verification on a real CAD exit is pending, and the fix is covered by fake-process tests so far. An earlier version closed a young launch-chain process after a prefix boot, which is why the age guard exists.
-- `padded_border.py`: a diagnostic that sets `PaddedBorderWidth` to 4 px in the prefix. The result was negative: it didn't stop the header drift. Kept only for reference.
-- The header-wipe fix in `spacemouse-view.c`: built and compile-checked, under test in CAD. This commit is a checkpoint, not a fix.
-
-Run the checks at the end of the replication guide before patching anything. Every patch checks the file's hash first. If one refuses, you've got a different build, so stop and look at it. Don't remove the guard.
+Run the checks in [INSTALL.md](docs/INSTALL.md) before patching anything. Every patch checks the file's hash first. If one refuses, you have a different build, so stop and look at it. Don't remove the guard.
 
 ## License
 
 SM4L is free software under the [GNU General Public License v3.0](LICENSE). Copyright 2026 Anthony Dragone.
 
-The license covers the scripts, add-in source and documentation in this repository. It doesn't cover SOLIDWORKS, the 3DEXPERIENCE platform, Microsoft components, Proton, UMU or any other vendor software. You need your own licences and media for those.
+The license covers the scripts, the add-in source and the documentation in this repository. It doesn't cover SOLIDWORKS, the 3DEXPERIENCE platform, Microsoft components, Proton, UMU or any other vendor software. You need your own licenses and media for those.

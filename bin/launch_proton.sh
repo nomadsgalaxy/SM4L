@@ -40,16 +40,17 @@ if [[ "$PROTON_NO_ESYNC" == 1 ]]; then esync=0; fi
 mkdir -p "$state/prefix/pfx"
 # Classic (unthemed) painting is the fix for the missing checkbox/radio labels; put it back if a Proton
 # or Wine update reset it. Only edits user.reg while no wineserver runs for this prefix.
-python3 -I "$(dirname -- "$(realpath -- "$0")")/ensure_theme_off.py" "$state/prefix/pfx" || true
+sm4l_root="$(realpath -- "$(dirname -- "$(realpath -- "$0")")/..")"
+python3 -I "$sm4l_root/setup/ensure_theme_off.py" "$state/prefix/pfx" || true
 # Match UMU's large descriptor budget for the shared server.
 ulimit -n "$(ulimit -Hn)"
 WINEPREFIX="$state/prefix/pfx" WINEFSYNC="$fsync" WINEESYNC="$esync" "$server" -p 9>&- || { status=$?; [[ "$status" == 2 ]] || exit "$status"; }
 if [[ "${SM4L_UI_COMPAT:-0}" == 1 ]]; then
-  nohup python3 -B "$(dirname -- "$(realpath -- "$0")")/spacemouse.py" --ui-only >"$log_dir/ui-compat.log" 2>&1 </dev/null 9>&- &
+  nohup python3 -B "$sm4l_root/addin/spacemouse.py" --ui-only >"$log_dir/ui-compat.log" 2>&1 </dev/null 9>&- &
 fi
 # The CAD shortcut enables navigation after the host server is safely running.
 if [[ "${SM4L_SPACEMOUSE:-0}" == 1 ]]; then
-  nohup python3 -B "$(dirname -- "$(realpath -- "$0")")/spacemouse.py" >"$log_dir/spacemouse.log" 2>&1 </dev/null 9>&- &
+  nohup python3 -B "$sm4l_root/addin/spacemouse.py" >"$log_dir/spacemouse.log" 2>&1 </dev/null 9>&- &
 fi
 export PROTON_LOG=1 PROTON_LOG_DIR="$log_dir"
 cd -- "$(dirname -- "$exe")"

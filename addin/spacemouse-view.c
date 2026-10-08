@@ -1665,7 +1665,7 @@ static int hook_SetWindowPos(P w, P after, int x, int y, int cx, int cy, U flags
     if (ret >= swp_base + 0x74be00 && ret < swp_base + 0x74bf00) {
       /* Dedupe (on by default; C:\\sm4l-swp-dedupe-off turns it off): the status bar's progress bar is re-positioned
        * to the rectangle it already has about 120 times per rebuild (every logged call was a no-op). The rules are in
-       * swp_dedupe.h and are checked by test_swp_dedupe.py. */
+       * swp_dedupe.h and are checked by tests/test_swp_dedupe.py. */
       if (swp_dedupe_on && flags == 4) {
         W name[24];
         int n = GetClassNameW(w, name, 24), r[4];

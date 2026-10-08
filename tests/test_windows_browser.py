@@ -1,3 +1,4 @@
+import _paths
 from pathlib import Path
 import tempfile
 from launch_windows_browser import configure

@@ -1,5 +1,6 @@
 """Check which leftovers cad_cleanup closes and which it never touches (pure plan checks, then real fake processes).
 The fake processes are started by this test with a made-up WINEPREFIX under a temp directory; nothing else is touched."""
+import _paths
 import os, signal, subprocess, sys, tempfile, time
 from pathlib import Path
 import cad_cleanup as c

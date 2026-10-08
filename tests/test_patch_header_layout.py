@@ -1,4 +1,5 @@
 """Check pinned guard, branch destinations, and unknown-DLL refusal without starting CAD."""
+import _paths
 import hashlib
 from pathlib import Path
 import struct

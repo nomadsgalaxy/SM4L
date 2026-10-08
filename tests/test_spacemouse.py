@@ -1,4 +1,5 @@
 """Check motion bounds, axis tuning and the exact Windows packet layout."""
+import _paths
 import math
 from pathlib import Path
 import stat

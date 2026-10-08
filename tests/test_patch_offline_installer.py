@@ -1,4 +1,5 @@
 """Validate the one-byte change against the locally supplied, supported installer."""
+import _paths
 import sys
 from pathlib import Path
 from patch_offline_installer import BRANCH_OFFSET, patched_bytes

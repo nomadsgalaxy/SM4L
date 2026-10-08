@@ -1,4 +1,5 @@
 """Independent wildcard contract cases plus exact CATSysTS import rewrite guards."""
+import _paths
 import ctypes as C
 import locale
 from pathlib import Path
@@ -16,7 +17,7 @@ def u(s):
     return U(len(b),len(b),a)
 with tempfile.TemporaryDirectory() as d:
     lib=Path(d)/'matcher.so'
-    subprocess.run(['cc','-shared','-fPIC','-O2','-Wall','-Wextra','-Werror','rtl_name_match.c','-o',str(lib)],check=True)
+    subprocess.run(['cc','-shared','-fPIC','-O2','-Wall','-Wextra','-Werror',str(_paths.ROOT/'setup'/'rtl_name_match.c'),'-o',str(lib)],check=True)
     f=C.CDLL(str(lib)).sw_match; f.argtypes=[C.POINTER(U),C.POINTER(U),C.c_ubyte,C.POINTER(C.c_ushort)]; f.restype=C.c_ubyte
     # Expectations include NT empty-name, DOS wildcard and expression-upcase behavior.
     cases=[('', '',0,1),('*','',0,0),('*','a',0,1),('*.dico','x.dico',0,1),('*.dico','x.txt',0,0),
@@ -39,17 +40,17 @@ if len(sys.argv)>1:
     from apply_directory_compat import apply
     with tempfile.TemporaryDirectory() as d:
         target=Path(d)/'CATSysTS.dll'; target.write_bytes(data)
-        apply(target,Path('swcompat.dll'))
+        apply(target,_paths.ROOT/'setup'/'swcompat.dll')
         assert target.read_bytes()==out
         assert target.with_name('CATSysTS.dll.pre-swcompat').read_bytes()==data
-        assert (target.parent/'swcompat.dll').read_bytes()==Path('swcompat.dll').read_bytes()
-        try: apply(target,Path('swcompat.dll'))
+        assert (target.parent/'swcompat.dll').read_bytes()==_paths.ROOT/'setup'/'swcompat.dll'.read_bytes()
+        try: apply(target,_paths.ROOT/'setup'/'swcompat.dll')
         except ValueError: pass
         else: raise AssertionError('Patched an already changed DLL')
     with tempfile.TemporaryDirectory() as d:
         target=Path(d)/'CATSysTS.dll'; target.write_bytes(data)
         (target.parent/'swcompat.dll').write_bytes(b'unrelated existing DLL')
-        try: apply(target,Path('swcompat.dll'))
+        try: apply(target,_paths.ROOT/'setup'/'swcompat.dll')
         except ValueError: pass
         else: raise AssertionError('Overwrote unrelated proxy')
         assert target.read_bytes()==data

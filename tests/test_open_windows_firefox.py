@@ -1,9 +1,10 @@
+import _paths
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 
-script = Path(__file__).with_name('open_windows_firefox.sh').resolve()
+script = (_paths.ROOT/'bin'/'open_windows_firefox.sh').resolve()
 with tempfile.TemporaryDirectory() as directory:
     home = Path(directory)
     state = home / 'state with spaces'

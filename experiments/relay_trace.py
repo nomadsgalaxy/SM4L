@@ -4,7 +4,7 @@ set    adds HKCU\\Software\\Wine\\Debug RelayInclude and RelayFromExclude
 clear  removes them again
 status shows what is set
 Run it while NO wineserver runs for the prefix (Wine reads user.reg at server start), then start the
-prefix with WINEDEBUG=+relay (for example: WINEDEBUG=+relay ./launch_solidworks.sh)."""
+prefix with WINEDEBUG=+relay (for example: WINEDEBUG=+relay bin/launch_solidworks.sh)."""
 import importlib.util, os, sys
 from pathlib import Path
 
@@ -21,7 +21,7 @@ SECTION = '[Software\\\\Wine\\\\Debug]'
 NAMES = ('"RelayInclude"=', '"RelayFromExclude"=')
 
 def load_guard():
-    spec = importlib.util.spec_from_file_location('theme_guard', Path(__file__).with_name('ensure_theme_off.py'))
+    spec = importlib.util.spec_from_file_location('theme_guard', Path(__file__).resolve().parents[1]/'setup'/'ensure_theme_off.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
 

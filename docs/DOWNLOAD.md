@@ -21,7 +21,7 @@ Run this from a terminal inside your graphical session, with your URL in place o
 ```bash
 export SOLIDWORKS_PROTON_STATE="$HOME/.local/share/solidworks-proton"
 export SOLIDWORKS_PLATFORM_URL='https://YOUR-PLATFORM-HOST.3dexperience.3ds.com/'
-python3 -B launch_windows_browser.py
+python3 -B bin/launch_windows_browser.py
 ```
 
 That opens a separate Firefox instance with its own profile at:
@@ -79,7 +79,7 @@ mkdir -p "$SOLIDWORKS_PROTON_STATE/media"
 unzip "$HOME/Downloads/SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip" \
   -d "$SOLIDWORKS_PROTON_STATE/media"
 export MEDIA_1="$SOLIDWORKS_PROTON_STATE/media/SOLIDWORKS_3DEXP_Desktop.Full.Windows64/1"
-python3 -B test_patch_offline_installer.py "$MEDIA_1"
+python3 -B tests/test_patch_offline_installer.py "$MEDIA_1"
 ```
 
 Change the path if Firefox saved the ZIP somewhere else. `MEDIA_1` has to point at the folder with the original `setup.exe`, `setup_noUAC.exe` and `media.db`. If the vendor's layout looks different, check the extracted folder.
@@ -101,4 +101,4 @@ The check confirms the original installer files and the exact byte the patch wil
 - If you see **Install/Open** later, that's the Windows launcher handoff. A spinning Open button is a service or sign-in problem. It doesn't mean your ZIP is corrupt.
 - If the full-media controls still don't appear after a verified Windows identity and a normal sign-in, check that your Makers role is assigned and that the platform URL is right. Don't try to get around sign-in or licensing.
 
-Once it's extracted, carry on with [the replication guide](REPLICATE.md). You can leave the signed-in profile open for the CAD login later, or close it and come back to it. Closing Firefox doesn't delete the profile.
+Once it's extracted, carry on with [the install guide](INSTALL.md). You can leave the signed-in profile open for the CAD login later, or close it and come back to it. Closing Firefox doesn't delete the profile.
