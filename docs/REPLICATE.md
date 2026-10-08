@@ -326,7 +326,37 @@ cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32/msxml6.dll" "$S
 cp "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/syswow64/msxml6.dll" "$SOLIDWORKS_PROTON_STATE/msxml6-backup/syswow64-msxml6.dll"
 ```
 
-Get Microsoft's MSXML 6.0 package, KB2957482. Winetricks caches it as `msxml6-KB2957482-enu-amd64.exe`. Extract the `.msi` from it with 7z, and then extract the `.msi` to a folder. Copy the x64 `msxml6.dll` and `msxml6r.dll` into `system32`, and the x86 `msxml6.dll` and `msxml6r.dll` into `syswow64`.
+Get Microsoft's MSXML 6.0 package, KB2957482. Winetricks downloads it from [Microsoft's download page](https://download.microsoft.com/download/2/7/7/277681BE-4048-4A58-ABBA-259C465B1699/msxml6-KB2957482-enu-amd64.exe) and caches it under `~/.cache/winetricks/msxml6/`. Check the file first:
+
+```bash
+sha256sum msxml6-KB2957482-enu-amd64.exe
+# expected: 260cd870851ffc3c6d10b71691f134e20d8d03ac26073bb36951eacb7aa85897
+```
+
+Extract the installer, then the `.msi` it contains. The files inside are named by their MSI file key:
+
+```bash
+7z x -y msxml6-KB2957482-enu-amd64.exe
+7z x -y msxml6.msi
+```
+
+The 64-bit and 32-bit builds are told apart by the key suffix. Copy each one to the name CAD expects:
+
+```bash
+MSXML_SRC="$PWD"
+SYS32="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32"
+SYSWOW="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/syswow64"
+cp "$MSXML_SRC/msxml6.dll.1ECC0691_D2EB_4A33_9CBF_5487E5CB17DB" "$SYS32/msxml6.dll"
+cp "$MSXML_SRC/msxml6r.dll.1ECC0691_D2EB_4A33_9CBF_5487E5CB17DB" "$SYS32/msxml6r.dll"
+cp "$MSXML_SRC/msxml6.dll.86F857F6_A743_463D_B2FE_98CB5F727E09" "$SYSWOW/msxml6.dll"
+cp "$MSXML_SRC/msxml6r.dll.86F857F6_A743_463D_B2FE_98CB5F727E09" "$SYSWOW/msxml6r.dll"
+```
+
+The expected SHA256 values, before you copy:
+
+- `system32` (x64): `msxml6.dll` `6fb5aead277001403cd01178346253455cdb9926b69f12ee99764ae358d7b21b`, `msxml6r.dll` `6e476a37fcff8ceab3ea9d08b381cc42238b00ad50b0fd05250b621c4ecdbce2`
+- `syswow64` (x86): `msxml6.dll` `66fb552089d28797ed74afbff5ab2c739828cf9abb10579a6641d5bd51cdec7b`, `msxml6r.dll` `c4c3e734abbf54424f878457d93e4981f0ef19cfa974aeeacddfa916a508b185`
+
 
 Then set the override for CAD only, and stop the prefix again:
 
