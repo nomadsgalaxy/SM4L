@@ -12,6 +12,22 @@ Keep the prefix's logs local. They can contain sign-in URLs and tickets.
 
 **Do this:** rerunning doesn't fix it, and a resumed run also fails earlier, with "Failed to expand expression ... CSIDL_COMMON_DOCUMENTS" and exit code 3. Set the old prefix aside (rename it, don't delete it), then create a fresh prefix and redo [INSTALL.md](INSTALL.md) steps 5 and 6. In the platform installer, choose **updates on demand** (MultiManual) this time. Confirm the choice in `Journal.log` under the `InstallData` folder: it should show `MultiManual=true`. Deleting only the ini is untested, so don't rely on it. Then install CAD through Installation Manager in [INSTALL.md](INSTALL.md), step 8.
 
+## CAD crashes when a Save, Save As or Open dialog opens
+
+**You see:** CAD crashes when you open any Save, Save As or Open dialog. It was first seen at Save As 3MF on the desktop replication.
+
+**Usual cause:** the prefix has no `steamuser\Desktop` folder. `SHGetDesktopFolder` fails, and Wine's file dialog constructor then dereferences a NULL pointer (`c0000005`, at `COMDLG32.dll+0x13e1a`).
+
+**Do this:** close CAD, create the folder, restart the prefix, and start CAD again:
+
+```bash
+mkdir -p "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/users/steamuser/Desktop"
+```
+
+Step 5 in [INSTALL.md](INSTALL.md) creates the folder for a new prefix. `setup.sh` creates it too.
+
+**Finding the cause of a crash:** SOLIDWORKS' crash reporter writes a minidump to `Temp\CXPD\<start-time>_34.3.0.0150\` inside the prefix. Its exception record and module list name the faulting DLL, even when `WINEDEBUG=-all`. That's how this crash was identified. This crash was not caused by the native msxml6 setting, which was loaded in the crashing session.
+
 ## After a CAD crash, nothing starts cleanly
 
 **You see:** CAD dies about 25 seconds after it starts, or new launches stall, after an earlier crash.

@@ -55,12 +55,23 @@ prefix_ready() {
   local reg="$state/prefix/pfx/system.reg"
   [[ -f "$reg" ]] && grep -q -a -F '[Software\\Classes\\CLSID\\' "$reg" && (( $(grep -c -a '^\[' "$reg") >= ${SM4L_MIN_REG_KEYS:-5000} ))
 }
+# A fresh UMU-Proton prefix has no Desktop folder (or Documents, Downloads, ...) in its user profile. CAD's Open and Save dialogs then
+# fail in SHGetDesktopFolder and the process crashes (c0000005 in comdlg32), so make the standard profile folders if they are missing.
+# Existing entries, including symlinks, are left alone.
+ensure_profile_folders() {
+  local users="$state/prefix/pfx/drive_c/users" entry
+  [[ -d "$users" ]] || return 0
+  for entry in steamuser/Desktop steamuser/Documents steamuser/Downloads steamuser/Pictures steamuser/Music steamuser/Videos Public/Desktop Public/Documents; do
+    if [[ ! -e "$users/$entry" && ! -L "$users/$entry" ]]; then mkdir -p -- "$users/$entry" || true; fi
+  done
+}
 if (( ! oneshot )) && ! prefix_ready; then
   echo "Creating the Proton prefix (plain umu-run, no persistent server yet)..." >&2
   ( cd -- "$state" && "${UMU_RUN:-umu-run}" "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0 9>&- ) || true
   WINEPREFIX="$state/prefix/pfx" timeout 60 "$server" -w 9>&- || true
   prefix_ready || { echo "The prefix was not initialised (no healthy registry with CLSID keys in $state/prefix/pfx/system.reg); not starting a server on it." >&2; exit 3; }
 fi
+if (( ! oneshot )); then ensure_profile_folders; fi
 # Classic (unthemed) painting is the fix for the missing checkbox/radio labels; put it back if a Proton
 # or Wine update reset it. Only edits user.reg while no wineserver runs for this prefix.
 sm4l_root="$(realpath -- "$(dirname -- "$(realpath -- "$0")")/..")"
@@ -69,6 +80,7 @@ if (( oneshot )); then
   case "$(basename -- "$exe")" in sldworks.exe|SWXDesktopLauncher.exe|ENOPLMCSAClient.exe)
     echo "--oneshot is for short setup commands, not for CAD or its launcher" >&2; exit 2 ;;
   esac
+  ensure_profile_folders
   if python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from ensure_theme_off import server_running; sys.exit(0 if server_running(sys.argv[2]) else 1)' "$sm4l_root/setup" "$state/prefix/pfx"; then
     export WINEPREFIX="$state/prefix/pfx" WINEDEBUG="${WINEDEBUG:--all}"
     cd -- "$(dirname -- "$exe")"
@@ -88,4 +100,11 @@ if [[ "${SM4L_SPACEMOUSE:-0}" == 1 ]]; then
 fi
 export PROTON_LOG=1 PROTON_LOG_DIR="$log_dir"
 cd -- "$(dirname -- "$exe")"
+if (( oneshot )); then
+  # Not exec: when this was the run that created the prefix, make the profile folders afterwards, then pass the exit code on.
+  status=0
+  "${UMU_RUN:-umu-run}" "$exe" "$@" || status=$?
+  ensure_profile_folders
+  exit "$status"
+fi
 exec "${UMU_RUN:-umu-run}" "$exe" "$@"

@@ -54,6 +54,7 @@ check_umu() { [[ -x "$UMU_RUN" && -d "$PROTONPATH/files/bin" ]]; }
 # A prefix whose registry lacks the CLSID keys (or has under 5000 keys) was created by a wineserver that started before Proton copied its default registry in
 # (installers then fail with status 5), so "drive_c exists" is not enough.
 check_prefix() {
+  [[ -d "$PFX/drive_c/users/steamuser/Desktop" ]] &&   # without it CAD crashes in Open/Save dialogs (launch_proton.sh creates it)
   [[ -d "$PFX/drive_c" && -f "$PFX/system.reg" ]] && grep -q -a -F '[Software\\Classes\\CLSID\\' "$PFX/system.reg" &&
     (( $(grep -c -a '^\[' "$PFX/system.reg") >= ${SM4L_MIN_REG_KEYS:-5000} ))   # a healthy fresh prefix has about 17,000 keys, a clobbered one about 80
 }

@@ -105,6 +105,12 @@ pwine() {
 }
 ```
 
+The launcher now creates the standard profile folders after the prefix is initialised, including `users/steamuser/Desktop`. A fresh UMU-Proton-10.0-4 prefix doesn't have that folder, and CAD's file dialogs crash without it. Only create them by hand if the launcher can't. Then `mkdir -p` the folders:
+
+```bash
+mkdir -p "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/users/steamuser"/{Desktop,Documents,Downloads,Pictures,Music,Videos}
+```
+
 **Check:** `ls "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c"` lists `windows` and `Program Files`, and `system.reg` has a `[Software\\Classes\\CLSID]` section. A healthy prefix's `system.reg` is a few megabytes. A prefix of about 250 KB is broken, and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) explains the fix.
 
 `launch_proton.sh` starts the persistent Wine server on the host before UMU builds its container. It keeps fsync and esync off, and it raises the file-descriptor limit. Every launch into this prefix has to use the same Proton and sync settings.

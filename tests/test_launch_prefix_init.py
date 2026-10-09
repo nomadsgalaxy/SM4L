@@ -14,6 +14,7 @@ if a and a[0].endswith("cmd.exe"):
     Path(base + ".init").write_text(json.dumps({"args": a, "server_started": Path(base + ".server").exists()}))
     if os.environ.get("FAKE_INIT_WRITES", "1") == "1":
         reg = Path(os.environ["WINEPREFIX"]) / "pfx" / "system.reg"
+        (Path(os.environ["WINEPREFIX"]) / "pfx" / "drive_c" / "users" / "steamuser").mkdir(parents=True, exist_ok=True)
         reg.write_text("".join("[Software\\\\\\\\Classes\\\\\\\\CLSID\\\\\\\\{%d}] 1\\n" % i for i in range(int(os.environ.get("FAKE_INIT_KEYS", "1")))))
     sys.exit(0)
 Path(base + ".umu").write_text(json.dumps({"args": a}))
@@ -73,4 +74,18 @@ with tempfile.TemporaryDirectory() as tmp:
     reset(); (pfx / 'system.reg').write_text(big)
     done = subprocess.run([launcher, exe], env=strict, capture_output=True, text=True)
     assert done.returncode == 0 and not seen('.init').exists() and seen('.server').exists()   # 6000 keys: left alone
+    # 7. The standard profile folders: a fresh prefix has no Desktop and CAD's Open/Save dialogs crash without it. They are made after the
+    #    init (normal and --oneshot), on every launch if missing, and existing entries (including symlinks) are left alone.
+    users = pfx / 'drive_c' / 'users'
+    wanted = ['steamuser/' + n for n in ('Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos')] + ['Public/Desktop', 'Public/Documents']
+    import shutil
+    shutil.rmtree(pfx); reset()
+    done = launch(); assert done.returncode == 0 and all((users / w).is_dir() for w in wanted), [w for w in wanted if not (users / w).is_dir()]
+    shutil.rmtree(users / 'steamuser' / 'Desktop'); (users / 'steamuser' / 'Documents').rmdir()
+    (users / 'steamuser' / 'Documents').symlink_to('Downloads')                  # a symlink in place of a folder: kept as it is
+    reset(); done = launch(); assert done.returncode == 0
+    assert (users / 'steamuser' / 'Desktop').is_dir() and (users / 'steamuser' / 'Documents').is_symlink()
+    shutil.rmtree(users / 'steamuser' / 'Desktop'); reset(); (pfx / 'system.reg').unlink()
+    done = subprocess.run([launcher, '--oneshot', exe], env=env, capture_output=True, text=True)   # --oneshot creates a prefix too
+    assert done.returncode == 0 and (users / 'steamuser' / 'Desktop').is_dir()
 print('fresh prefix is initialised before the persistent server starts; a ready prefix is left alone')
