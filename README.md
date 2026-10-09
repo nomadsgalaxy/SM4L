@@ -24,7 +24,7 @@ SM4L is not affiliated with, endorsed by, or supported by Dassault Systèmes, SO
 - SOLIDWORKS Design 2026 SP3.0, from the 3DEXPERIENCE SOLIDWORKS platform media.
 - A wired 3Dconnexion SpaceMouse Pro, optional.
 
-A second machine, a CachyOS desktop with an NVIDIA RTX 2070 SUPER and the same pinned versions, ran a fresh-prefix replication on 2026-10-08. It's the first replication on a new machine and the first run on NVIDIA. Its step 18 results so far: part save, close and reopen work; Save As 3MF works; and the viewport renders on NVIDIA and is smooth. SpaceMouse and the Fillet labels and headers are still pending. See [tested-versions.json](docs/tested-versions.json).
+A second machine, a CachyOS desktop with an NVIDIA RTX 2070 SUPER and the same pinned versions, ran a fresh-prefix replication on 2026-10-08. It's the first replication on a new machine and the first run on NVIDIA. Its step 18 checks are complete: part save and reopen, Save As 3MF, the viewport on NVIDIA, the Fillet labels and headers, and the SpaceMouse over USB. The SpaceMouse feels a bit slow to the user, and whether that's sensitivity or lag is still being checked. See [tested-versions.json](docs/tested-versions.json).
 
 ## Quick start
 

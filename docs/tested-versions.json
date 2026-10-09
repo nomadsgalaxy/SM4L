@@ -102,14 +102,16 @@
     "graphics": "Enhanced graphics performance OFF (Use Performance Pipeline 2020 = 0). The viewport works; the user reports it is smooth. Whether it was black before the change wasn't recorded.",
     "add_ins_at_second_start": "header fix A and B on; swp dedupe armed; the PDM unhook logged result=0x1 error=0x0; the in-process SpaceMouse add-in connected. The SpaceMouse was a wireless Bluetooth device, and Bluetooth wasn't connected at the time.",
     "step_18_results": {
+      "status": "complete",
       "verified": [
         "Part save, close and reopen work.",
         "Save As 3MF works, and a test 3MF was made.",
-        "The viewport renders on the NVIDIA GPU after Enhanced graphics performance is turned off. The user reports it is smooth."
+        "The viewport renders on the NVIDIA GPU after Enhanced graphics performance is turned off. The user reports it is smooth.",
+        "The Fillet/Chamfer checkbox and radio labels and the section headers show correctly.",
+        "The SpaceMouse works when it's connected by USB. The wireless model was asleep over Bluetooth during the run, so only the USB device was checked."
       ],
-      "pending": [
-        "SpaceMouse: the wireless device was asleep over Bluetooth during this run.",
-        "The Fillet checkbox and radio labels and the section headers, checked in the PropertyManager."
+      "open": [
+        "SpaceMouse sensitivity: the user says it feels a bit slow. It isn't yet known whether that's the sensitivity setting or added lag. sw-dev is checking."
       ]
     }
   }
