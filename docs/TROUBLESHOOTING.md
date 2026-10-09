@@ -8,9 +8,9 @@ Keep the prefix's logs local. They can contain sign-in URLs and tickets.
 
 **You see:** the platform installer fails with error 1603. `Errors.log` names `SWXDesktopInsSWK:SWXDesktopInsSWKInstall`, and the failure is at `InstallSpatialIOP`, with `SHBindToObject failed - HRESULT: 0x80070002`, then "Unzip failed", then a rollback.
 
-**Usual cause:** the platform installer was set to the automatic upgrade type (`SWXDesktopInsUpgradeType_SingleAutomatic`). That makes it run the SOLIDWORKS MSI in the same pass, and the Windows ZIP-shell path fails there.
+**Usual cause:** the platform installer was set to automatic (`SWXDesktopInsUpgradeType_SingleAutomatic`). That makes it run the SOLIDWORKS MSI in the same pass, and the Windows ZIP-shell path fails there. The first run writes `SWXDesktopInsData.ini` under the install's `win_b64\resources` folder, with `SWXDesktopInsUpgradeTypeLiteBefore=SWXDesktopInsUpgradeTypeLite_Automatic`. Every rerun or resume reads that file and forces automatic again, whatever you choose.
 
-**Do this:** run the platform install again with **updates on demand** (MultiManual) selected. Don't choose the automatic option. Then install CAD through Installation Manager in [INSTALL.md](INSTALL.md), step 8, which has the workaround for `InstallSpatialIOP`.
+**Do this:** rerunning doesn't fix it, and a resumed run also fails earlier, with "Failed to expand expression ... CSIDL_COMMON_DOCUMENTS" and exit code 3. Set the old prefix aside (rename it, don't delete it), then create a fresh prefix and redo [INSTALL.md](INSTALL.md) steps 5 and 6. In the platform installer, choose **updates on demand** (MultiManual) this time. Confirm the choice in `Journal.log` under the `InstallData` folder: it should show `MultiManual=true`. Deleting only the ini is untested, so don't rely on it. Then install CAD through Installation Manager in [INSTALL.md](INSTALL.md), step 8.
 
 ## After a CAD crash, nothing starts cleanly
 
