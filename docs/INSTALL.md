@@ -124,9 +124,11 @@ Don't stop another prefix, or a session with unsaved work.
 ```bash
 "$UMU_RUN" winetricks -q dotnet48
 WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserver" -k
-"$LAUNCH" "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32/winecfg.exe" -v win11
+"$LAUNCH" --oneshot "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/windows/system32/winecfg.exe" -v win11
 pwine 'C:\windows\Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe' /?
 ```
+
+The `winecfg` call runs and exits 0 on a fresh prefix. On a scratch prefix it didn't leave a `win11` value in `user.reg`, because the Proton default may already be the target version, so this step shows only that the command returns. The `reg.exe` and `RegAsm` lines keep `pwine`, which returns on its own. Each `pwine` call starts a Wine server when none is running, and that server writes `user.reg` when it exits, so keep the `wineserver -k` line after the registry blocks.
 
 The media's own .NET 4.8.1 installer reported success without installing the 64-bit RegAsm, and the Login Manager registration still failed. Winetricks' .NET 4.8 recipe fixed it.
 
@@ -229,6 +231,8 @@ ls "$CAD_DIR/sldworks.exe"
 "$LAUNCH" "$SOLIDWORKS_PROTON_STATE/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install
 ```
 
+
+The installer spawns its own children, so judge success by the result: `msedgewebview2.exe` is present (the check below), not by when the launcher returns.
 **Check:** `msedgewebview2.exe` exists under `drive_c/Program Files (x86)/Microsoft/EdgeWebView/Application/<version>/`, and the EdgeUpdate registration shows `pv` and `LastInstallerError=0`.
 
 Keep Proton's `msedgewebview2.exe` `Version=win7` override. The reference machine tried `win11` first, and the startup failures came back until `win7` was restored. That's what worked there. It isn't a Microsoft statement about Windows 7 support.
