@@ -1,119 +1,115 @@
 {
-  "date": "2026-10-07",
-  "status": "Modeling confirmed on one Arch Linux x86_64 laptop; desktop replication pending",
-  "edition": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
-  "platform_media": "SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip",
-  "umu": "1.4.4",
-  "umu_zipapp_sha256": "d0005a58602041229cc467dab03dc0c0b9e8cce09a8145b16b7683244cf17804",
-  "proton": "UMU-Proton-10.0-4",
-  "proton_version_file": "1774856027 UMU-Proton-10.0-4",
-  "runtime": "sniper 3.0.20260928.262393",
-  "packages": {
-    "firefox": "157.0-1.1",
-    "wine_import_libraries": "11.18-1.1",
-    "clang": "23.1.1-1.1",
-    "lld": "23.1.1-1.1",
-    "python": "3.14.7-2",
-    "mesa": "3:26.2.4-1",
-    "vulkan-intel": "3:26.2.4-1",
-    "spacenavd": "1.3.1-1",
-    "libspnav": "1.2-1.1"
+  "status": "Verified end to end on two reference machines: a laptop with Intel Mesa graphics and a desktop with an NVIDIA GPU.",
+  "date": "2026-10-08",
+  "shared_pins": {
+    "umu": "1.4.4",
+    "umu_zipapp_sha256": "d0005a58602041229cc467dab03dc0c0b9e8cce09a8145b16b7683244cf17804",
+    "proton": "UMU-Proton-10.0-4",
+    "proton_version_file": "1774856027 UMU-Proton-10.0-4",
+    "runtime": "sniper 3.0.20260928.262393",
+    "webview2": "154.0.4258.62",
+    "webview2_installer_sha256": "ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69",
+    "edition": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
+    "historical_full_media_product": "W4Y - 3DEXPERIENCE SOLIDWORKS Ultimate",
+    "required_source_hashes": {
+      "setup.exe": "c3aeeecdb030e124c74eb9a4897ff08c60122e2ed7bc2058b313c8c4cddb222a",
+      "CATSysTS.dll": "acfb5354bf75164f1e81def14e856aa50004bfb365dea165dcb93c1f6c7b8f35",
+      "solidworks.msi": "f0ab874d24fd70842764ef90ca0293406d6c322cd3329f230ce80d564a5b91c4",
+      "spatialiop.zip": "3a5584aa82d821a7426da919b02d309cea1afd7f9e540c3e23a9eab43358ccda",
+      "comctl32.dll": "d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676"
+    },
+    "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771",
+    "platform_media": "SOLIDWORKS_3DEXP_Desktop.Full-CP0490V6R2026x.HF4.13.Windows64.zip"
   },
-  "renderer": "Mesa Intel(R) Graphics (MTL)",
-  "webview2": "154.0.4258.62",
-  "webview2_installer_sha256": "ac22ecdc19c5b88b87f3fa752c00da9541653a8f5c0c5fc4a3b2b6ebe6591f69",
-  "historical_full_media_product": "W4Y - 3DEXPERIENCE SOLIDWORKS Ultimate",
-  "actual_live_product": "Professional for Makers",
-  "uninstall_reinstall_performed": false,
-  "modeling_evidence": "Anthony reported creating a cube and chamfering it after disabling Enhanced graphics performance and restarting",
-  "header_probe": "Valid layout succeeded; null layout crashed before guard and returned FALSE after guard with native,builtin override",
-  "save_reopen_verified": false,
-  "space_mouse_verified": true,
-  "browser_flicker_remaining": true,
-  "fresh_prefix_replication_verified": false,
-  "required_source_hashes": {
-    "setup.exe": "c3aeeecdb030e124c74eb9a4897ff08c60122e2ed7bc2058b313c8c4cddb222a",
-    "CATSysTS.dll": "acfb5354bf75164f1e81def14e856aa50004bfb365dea165dcb93c1f6c7b8f35",
-    "solidworks.msi": "f0ab874d24fd70842764ef90ca0293406d6c322cd3329f230ce80d564a5b91c4",
-    "spatialiop.zip": "3a5584aa82d821a7426da919b02d309cea1afd7f9e540c3e23a9eab43358ccda",
-    "comctl32.dll": "d0616fbdb1649047ac7f0fea3a55f8ab70b33b4c0703c056a6706c43c0cf1676"
-  },
-  "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771",
-  "space_mouse_device": "3Dconnexion SpaceMouse Pro USB 046d:c62b",
-  "space_mouse_evidence": "Anthony confirmed smooth navigation and correct tilt after the in-process batched redraw fix; focused view updates measured 14–18 ms",
-  "space_mouse_buttons_verified": false,
-  "start_menu_verified": true,
-  "space_mouse_addin": {
-    "dll": "C:\\sm4l-spacemouse-v3.dll",
-    "clsid": "{BB75177C-6799-4F57-9B75-10931D6421F6}",
-    "view_frame_ms": [
-      14,
-      18
-    ],
-    "input_hz": 30,
-    "buttons_mapped": false,
-    "final_tuning_verified": true
-  },
-  "second_machine_replication": {
-    "date": "2026-10-08",
-    "description": "First fresh-prefix replication on a second machine, and the first run on an NVIDIA GPU. Reported by the desktop replication.",
-    "machine": {
+  "reference_machines": [
+    {
+      "name": "Reference laptop",
+      "os": "CachyOS (Arch-based), kernel 7.2.8-1-cachyos",
+      "desktop": "KDE Plasma on Wayland (KWin)",
+      "gpu": "Intel Mesa Graphics (MTL)",
+      "renderer": "Mesa Intel(R) Graphics (MTL)",
+      "spacemouse": "3Dconnexion SpaceMouse Pro (USB 046d:c62b), built-in defaults",
+      "packages": {
+        "firefox": "157.0-1.1",
+        "wine_import_libraries": "11.18-1.1",
+        "clang": "23.1.1-1.1",
+        "lld": "23.1.1-1.1",
+        "python": "3.14.7-2",
+        "mesa": "3:26.2.4-1",
+        "vulkan-intel": "3:26.2.4-1",
+        "spacenavd": "1.3.1-1",
+        "libspnav": "1.2-1.1"
+      },
+      "live_product": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
+      "verified": [
+        "Install, sign-in through the 3DEXPERIENCE platform, and launch from the menu entry and the browser Open button.",
+        "Sketching, extruding, chamfering and rotating a model.",
+        "SpaceMouse navigation, with the view following the cap.",
+        "Checkbox and radio labels, and the PropertyManager section headers through drag and resize, with the theme off and the header hook.",
+        "Save and reopen, Save As 3MF, and the viewport with Enhanced graphics performance off.",
+        "The speed fixes in the README, which are the header hook, the dedupe and the 3DEXPERIENCE PLM connector hook release."
+      ],
+      "notes": "Anthony reported creating a cube and chamfering it after disabling Enhanced graphics performance and restarting"
+    },
+    {
+      "name": "Reference desktop",
       "os": "CachyOS, kernel 7.2.8-1-cachyos",
       "desktop": "KDE Plasma on Wayland (KWin)",
-      "cpu_cores": 24,
-      "ram_gb": 30,
-      "cad_gpu": "NVIDIA GeForce RTX 2070 SUPER (TU104)",
+      "gpu": "NVIDIA GeForce RTX 2070 SUPER (TU104)",
       "other_gpu": "AMD Granite Ridge iGPU, not used by CAD",
-      "display_path": "winex11 through XWayland"
-    },
-    "drivers": {
-      "nvidia-production-open-dkms": "595.104.02-1",
-      "nvidia-production-utils": "595.104.02-1",
-      "mesa": "3:26.2.4-1",
-      "vulkan-radeon": "3:26.2.4-1",
-      "note": "glxinfo isn't installed, so no GL renderer string was recorded."
-    },
-    "pins": {
-      "umu": "1.4.4 zipapp, same SHA256 as the laptop",
-      "proton": "UMU-Proton-10.0-4 (1774856027)",
-      "runtime": "sniper 3.0.20260928.262393",
-      "wine_import_libs": "11.18-1.1",
-      "python": "3.14.7-2",
-      "lld": "23.1.1-1.1",
-      "spacenavd": "1.3.1-1",
-      "libspnav": "1.2-1.1",
-      "webview2": "154.0.4258.62, from the pinned installer",
-      "clang": "23.1.1-2 (laptop: pkgrel differs only)",
-      "firefox": "157.0-1 (laptop: pkgrel differs only)"
-    },
-    "vendor_pins_matched": [
-      "setup.exe",
-      "CATSysTS.dll",
-      "solidworks.msi",
-      "spatialiop.zip",
-      "comctl32.dll",
-      "swcompat.dll (own proxy)"
-    ],
-    "platform_install": {
-      "edition_selected": "XWB only; W4Y not selected",
-      "update_choice": "updates on demand (MultiManual)",
-      "live_product": "to be confirmed from the window title"
-    },
-    "graphics": "Enhanced graphics performance OFF (Use Performance Pipeline 2020 = 0). The viewport works; the user reports it is smooth. Whether it was black before the change wasn't recorded.",
-    "add_ins_at_second_start": "header fix A and B on; swp dedupe armed; the PDM unhook logged result=0x1 error=0x0; the in-process SpaceMouse add-in connected. The SpaceMouse was a wireless Bluetooth device, and Bluetooth wasn't connected at the time.",
-    "step_18_results": {
-      "status": "complete",
-      "verified": [
-        "Part save, close and reopen work.",
-        "Save As 3MF works, and a test 3MF was made.",
-        "The viewport renders on the NVIDIA GPU after Enhanced graphics performance is turned off. The user reports it is smooth.",
-        "The Fillet/Chamfer checkbox and radio labels and the section headers show correctly.",
-        "The SpaceMouse works when it's connected by USB. The wireless model was asleep over Bluetooth during the run, so only the USB device was checked."
+      "display_path": "winex11 through XWayland",
+      "drivers": {
+        "nvidia-production-open-dkms": "595.104.02-1",
+        "nvidia-production-utils": "595.104.02-1",
+        "mesa": "3:26.2.4-1",
+        "vulkan-radeon": "3:26.2.4-1",
+        "note": "glxinfo isn't installed, so no GL renderer string was recorded."
+      },
+      "packages": {
+        "umu": "1.4.4 zipapp, same SHA256 as the laptop",
+        "proton": "UMU-Proton-10.0-4 (1774856027)",
+        "runtime": "sniper 3.0.20260928.262393",
+        "wine_import_libs": "11.18-1.1",
+        "python": "3.14.7-2",
+        "lld": "23.1.1-1.1",
+        "spacenavd": "1.3.1-1",
+        "libspnav": "1.2-1.1",
+        "webview2": "154.0.4258.62, from the pinned installer",
+        "clang": "23.1.1-2 (laptop: pkgrel differs only)",
+        "firefox": "157.0-1 (laptop: pkgrel differs only)"
+      },
+      "spacemouse": "3Dconnexion SpaceMouse Wireless (USB 256f:c63a), 2x the defaults (systemd drop-in in SPACEMOUSE.md)",
+      "vendor_pins_matched": [
+        "setup.exe",
+        "CATSysTS.dll",
+        "solidworks.msi",
+        "spatialiop.zip",
+        "comctl32.dll",
+        "swcompat.dll (own proxy)"
       ],
-      "open": [],
-      "resolved": [
-        "SpaceMouse sensitivity: 2x the defaults feels right on the SpaceMouse Wireless over USB. It's applied as a systemd drop-in, and it's documented in SPACEMOUSE.md."
-      ]
+      "platform_install": {
+        "edition_selected": "XWB only; W4Y not selected",
+        "update_choice": "updates on demand (MultiManual)",
+        "live_product": "to be confirmed from the window title"
+      },
+      "live_product": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
+      "fresh_install": "from INSTALL.md on 2026-10-08",
+      "graphics": "Enhanced graphics performance OFF (Use Performance Pipeline 2020 = 0). The viewport works; the user reports it is smooth. Whether it was black before the change wasn't recorded.",
+      "verified": [
+        "Install from a fresh prefix, sign-in through the 3DEXPERIENCE platform, and launch from the menu entry and the browser Open button.",
+        "The viewport renders on the NVIDIA GPU with Enhanced graphics performance off.",
+        "Checkbox and radio labels, and the section headers including through drag and resize.",
+        "SpaceMouse over USB, at 2x sensitivity.",
+        "Save and reopen, Save As 3MF, and the speed fixes in the README."
+      ],
+      "not_used_by_cad": "The AMD Granite Ridge iGPU is present but unused. AMD graphics is untested.",
+      "notes": "glxinfo isn't installed, so no GL renderer string was recorded. The live product was to be confirmed from the window title in its record."
     }
-  }
+  ],
+  "untested": [
+    "AMD graphics.",
+    "3DEXPERIENCE-platform workflows (save and open to the platform, the 3DEXPERIENCE tab or task pane, lifecycle and collaboration) with the PDM connector hook release.",
+    "The sldProcMon.exe startup crash: harmless so far, not investigated.",
+    "The browser Open click is still required."
+  ]
 }

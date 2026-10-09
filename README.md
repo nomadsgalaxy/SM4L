@@ -6,7 +6,7 @@ They still require you to have an internet connection, but right now, it's the l
 
 The biggest challenge was getting the license from the 3DEXPERIENCE portal to pass through. SOLIDWORKS is AGGRESSIVE with hiding the install/open button for the app in 3DEXPERIENCE if you aren't running Windows, and telling your browser to spoof Windows with a user-agent doesn't work. I had to set up a separate Firefox profile that reports Windows everywhere the site checks before the option would show up, and even then, I had to make sure the Windows service it all relies on was able to communicate with the portal.
 
-So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on one Arch Linux x86_64 laptop through UMU and Proton. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
+So, after a few hours... It works. **SOLIDWORKS Design Professional for Makers 2026 SP3.0** runs on Arch-based Linux (CachyOS) through UMU and Proton, on an Intel laptop and an NVIDIA desktop. On October 7, 2026, I modeled a cube and chamfered it. Getting there took a startup crash fix and turning off Enhanced graphics performance, plus a pile of installer workarounds that are all written up here. I'm going to continue to expand upon this, and get it working on my other machines, but this is at least a template that others can use to improve upon.
 
 ## What this is
 
@@ -16,15 +16,14 @@ SM4L is a set of scripts, a small add-in and the written steps to run SOLIDWORKS
 
 SM4L is not affiliated with, endorsed by, or supported by Dassault Systèmes, SOLIDWORKS, Microsoft, Valve or Open Wine Components. You need your own SOLIDWORKS license and the vendor media. SM4L contains neither. The repository has no vendor binaries. The patches change only your own Wine prefix and your own installed copy, and they never change the original media.
 
-## Tested on
+## Reference machines
 
-- Arch Linux x86_64, KDE Plasma on Wayland (KWin).
-- An Intel GPU (`Mesa Intel(R) Graphics (MTL)`).
-- UMU 1.4.4 with UMU-Proton-10.0-4.
-- SOLIDWORKS Design 2026 SP3.0, from the 3DEXPERIENCE SOLIDWORKS platform media.
-- A wired 3Dconnexion SpaceMouse Pro, optional.
+SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on kernel 7.2.8-1-cachyos, with KDE Plasma on Wayland, UMU 1.4.4 and UMU-Proton-10.0-4, and both run **SOLIDWORKS Design Professional for Makers 2026 SP3.0**.
 
-A second machine, a CachyOS desktop with an NVIDIA RTX 2070 SUPER and the same pinned versions, ran a fresh-prefix replication on 2026-10-08. It's the first replication on a new machine and the first run on NVIDIA. Its step 18 checks are complete: part save and reopen, Save As 3MF, the viewport on NVIDIA, the Fillet labels and headers, and the SpaceMouse over USB. The SpaceMouse feels a bit slow to the user, and whether that's sensitivity or lag is still being checked. See [tested-versions.json](docs/tested-versions.json).
+- **Laptop:** Intel Mesa graphics (`Mesa Intel(R) Graphics (MTL)`), with a 3Dconnexion SpaceMouse Pro. This is the machine the guide was written on.
+- **Desktop:** NVIDIA GeForce RTX 2070 SUPER, with driver `595.104.02` (open kernel module). The AMD iGPU is present but unused by CAD. It has a SpaceMouse Wireless at 2x the default sensitivity. It's a fresh install from [INSTALL.md](docs/INSTALL.md) on 2026-10-08.
+
+Both are verified end to end: launch from the menu entry and the browser Open button, the viewport with Enhanced graphics performance off, the labels and headers, the SpaceMouse, save and reopen, 3MF export, and the speed fixes. The package and driver versions are in [tested-versions.json](docs/tested-versions.json).
 
 ## Quick start
 
@@ -40,35 +39,37 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 
 ## Status
 
-**Verified on the reference machine**
+**Verified on both reference machines**
 
 - Installing, signing in through the 3DEXPERIENCE platform, and launching CAD from the browser's Open button and from the menu entry.
 - Sketching, extruding, chamfering and rotating a model.
 - SpaceMouse navigation, with the view following the cap.
 - Checkbox and radio labels in the PropertyManager, with the theme off.
 - PropertyManager section headers, including through drag and resize.
-- Save As 3MF, verified once. The file imported into PrusaSlicer.
+- Saving a `.SLDPRT` and reopening it.
+- Save As 3MF.
+- The viewport with Enhanced graphics performance off.
 
 **Pending confirmation**
 
-- The status-bar `SetWindowPos` dedupe is on by default. It was measured in an A/B run, but not yet after a restart in normal mode.
 - The leftover-process cleanup is enabled. It hasn't yet acted on a real CAD exit.
 - The theme setting is re-applied before each start by `setup/ensure_theme_off.py`. That isn't confirmed in a real start yet.
-- Saving a `.SLDPRT` and reopening it.
 
 ## Known issues
 
 | Issue | Status | Workaround |
 | --- | --- | --- |
+| AMD graphics | Untested | Only the NVIDIA and Intel paths are verified |
+| 3DEXPERIENCE-platform workflows with the PDM connector hook release | Untested | The release is on by default and is verified for local files. Save and open to the platform, the 3DEXPERIENCE tab or task pane, lifecycle and collaboration are untested. Create `C:\sm4l-unhook-pdm-off` in the prefix's `drive_c` folder and restart CAD to keep the hook. Read the trade-off below before you use it |
+| The sldProcMon.exe startup crash | Open, harmless so far | Not investigated further |
+| The browser's Open click is still required | Open | Start CAD through the browser's Open button. Starting `sldworks.exe` directly doesn't skip the platform |
 | Embedded browser panels flash | Open | None yet. CAD still works while the panels flash |
 | Model rebuilds are slow | Open | In measured runs, most of the time goes to Wine window-system calls |
 | The cause of the header drift isn't identified | Open | The header hook in the UI add-in keeps the headers visible |
 | CAD has hung on exit once | Open | The cleanup in `addin/cad_cleanup.py` handles the stuck process. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
-| Save As 3MF needs native msxml6 | Verified once | Step 15 in [INSTALL.md](docs/INSTALL.md) |
-| Labels need the theme off | Verified | Step 14. The look is classic and flatter |
+| Save As 3MF needs native msxml6 | Verified on both machines | Step 15 in [INSTALL.md](docs/INSTALL.md) |
+| Labels need the theme off | Verified on both machines | Step 14. The look is classic and flatter |
 | Native KDE file chooser isn't integrated | Open | Use the normal file dialogs |
-| 3DEXPERIENCE PLM connector hook removal | Default-on; verified for local files | Removing one connector hook cuts UI-thread cost, but it also disables the connector's window tracking. Untested for 3DEXPERIENCE platform workflows. Read the trade-off below before you use it |
-| Fresh-machine replay not done | Open | Check each step's result as you go |
 
 ## Where to start
 

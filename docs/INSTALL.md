@@ -1,6 +1,6 @@
 # Install SOLIDWORKS on Arch Linux
 
-This is the full path, in order. It's based on one working Arch Linux x86_64 laptop with an Intel GPU, set up in October 2026. A second machine, with an NVIDIA GPU, has since replayed it from a fresh prefix. Check each step's result before you move on anyway.
+This is the full path, in order. It's verified end to end on two reference machines: an Intel Mesa laptop and an NVIDIA desktop, both on CachyOS (Arch-based) with KDE Plasma on Wayland. The desktop was a fresh install from this guide on 2026-10-08. The AMD graphics path is untested. Check each step's result before you move on anyway.
 
 `setup.sh` in the repository root runs the scriptable steps in this order. `./setup.sh --plan` shows where you are and changes nothing. The media step checks the vendor files before the installer runs, and the offline-patch step checks the patched copy byte for byte. It's pending a live test, so this guide is the reference.
 
