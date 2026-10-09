@@ -120,6 +120,16 @@ Check the file's SHA256 against the original before you restore it. Don't restor
 
 If the headers still wipe, the add-in's kill switches (`C:\sm4l-hdr-nozorder-off` and `C:\sm4l-hdr-clamp-off`) can isolate which part is involved. Their default is on.
 
+## dotnet48 fails with status 5, or the prefix registry is tiny
+
+**You see:** `winetricks -q dotnet48` (or `dotnet40`) fails with status 5, and the prefix's registry files are far smaller than they should be. On the desktop deploy, `user.reg` and the system registry were about 254 KB, where a healthy prefix had about 3.7 MB.
+
+**Usual cause:** the persistent host Wine server started before the prefix existed, so the server wrote an empty or partial registry. The launcher also didn't return after short commands, which hid the exit codes.
+
+**Do this:** a prefix whose `system.reg` lacks the `[Software\\Classes\\CLSID]` keys is broken. It's about 250 KB where a healthy one is about 4 MB. A healthy fresh prefix has about 4 MB of `system.reg` with the `[Software\\Classes\\CLSID]` keys. Stop the prefix's server, then rename `$SOLIDWORKS_PROTON_STATE/prefix` aside, for example to `prefix.broken-<date>`, and run `setup.sh` again. The launcher creates a fresh prefix itself. Keep the renamed copy until you're sure you don't need it. Don't delete it, because it can hold your own files. `setup.sh --plan` reports the prefix check.
+
+Judge the .NET step by `RegAsm.exe` existing, not by the exit status of `umu-run` or `winetricks`, because those exit codes aren't reliable here.
+
 ## setup.sh says the media is incomplete
 
 **You see:** `setup.sh` stops at the media step and prints the reason.

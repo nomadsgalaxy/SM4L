@@ -87,9 +87,13 @@ Install [UMU-Proton-10.0-4](https://github.com/Open-Wine-Components/umu-proton/r
 
 **Status: verified.**
 
+Create the prefix with a short one-shot command. `--oneshot` runs no persistent server. It returns when the program exits, with that program's exit code:
+
 ```bash
-"$LAUNCH" "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0
+"$LAUNCH" --oneshot "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0
 ```
+
+Normal mode starts the persistent server and is for CAD and the vendor launchers. `--oneshot` is for short setup commands: it returns when the program exits, with that program's exit code, and it refuses to start CAD or its launcher. The launcher also initialises a missing or broken prefix itself before it starts the host server, so a fresh install doesn't need a separate step. Starting the server before that overwrote Proton's default registry with a tiny one, and installers such as dotnet40 then failed with status 5. `--oneshot` also refuses to start CAD or its launcher.
 
 Define the registry helper once the prefix exists. It runs registry commands in the prefix without the fsync and esync settings that the launcher uses:
 
@@ -101,7 +105,7 @@ pwine() {
 }
 ```
 
-**Check:** `ls "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c"` lists `windows` and `Program Files`.
+**Check:** `ls "$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c"` lists `windows` and `Program Files`, and `system.reg` has a `[Software\\Classes\\CLSID]` section. A healthy prefix's `system.reg` is a few megabytes. A prefix of about 250 KB is broken, and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) explains the fix.
 
 `launch_proton.sh` starts the persistent Wine server on the host before UMU builds its container. It keeps fsync and esync off, and it raises the file-descriptor limit. Every launch into this prefix has to use the same Proton and sync settings.
 

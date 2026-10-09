@@ -9,7 +9,7 @@ launcher = (_paths.ROOT/'bin'/'launch_proton.sh').resolve()
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     fake = root / 'umu'
-    fake.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]).write_text(json.dumps({"args":sys.argv[1:],"cwd":os.getcwd(),"prefix":os.environ.get("WINEPREFIX"),"proton":os.environ.get("PROTONPATH"),"nofsync":os.environ.get("PROTON_NO_FSYNC"),"noesync":os.environ.get("PROTON_NO_ESYNC")}))\n')
+    fake.write_text('#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\na=sys.argv[1:]\nif a and a[0].endswith("cmd.exe"):\n reg=Path(os.environ["WINEPREFIX"])/"pfx"/"system.reg"\n reg.parent.mkdir(parents=True,exist_ok=True)\n reg.write_text("[Software\\\\\\\\Classes\\\\\\\\CLSID\\\\\\\\{x}] 1\\n")\n sys.exit(0)\nPath(os.environ["CAPTURE"]).write_text(json.dumps({"args":sys.argv[1:],"cwd":os.getcwd(),"prefix":os.environ.get("WINEPREFIX"),"proton":os.environ.get("PROTONPATH"),"nofsync":os.environ.get("PROTON_NO_FSYNC"),"noesync":os.environ.get("PROTON_NO_ESYNC")}))\n')
     fake.chmod(0o755)
     exe = root / 'app with spaces.exe'
     exe.touch()
@@ -17,9 +17,9 @@ with tempfile.TemporaryDirectory() as tmp:
     proton = root / 'proton'
     server = proton / 'files/bin/wineserver'
     server.parent.mkdir(parents=True)
-    server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:],"launch_lock_inherited":Path("/proc/self/fd/9").exists()}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
+    server.write_text('#!/usr/bin/env python3\nimport os,sys,json\nfrom pathlib import Path\nif sys.argv[1:]==["-w"]: sys.exit(0)\nPath(os.environ["CAPTURE"]+".server").write_text(json.dumps({"prefix":os.environ["WINEPREFIX"],"fsync":os.environ["WINEFSYNC"],"esync":os.environ["WINEESYNC"],"args":sys.argv[1:],"launch_lock_inherited":Path("/proc/self/fd/9").exists()}))\nsys.exit(int(os.environ.get("FAKE_SERVER_EXIT", "0")))\n')
     server.chmod(0o755)
-    env = dict(os.environ, UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0", SM4L_UI_COMPAT="0")
+    env = dict(os.environ, SM4L_MIN_REG_KEYS='1', UMU_RUN=str(fake), CAPTURE=str(capture), SOLIDWORKS_PROTON_STATE=str(root / 'state'), PROTONPATH=str(proton), SM4L_SPACEMOUSE="0", SM4L_UI_COMPAT="0")
     env.pop('PROTON_NO_FSYNC', None)
     env.pop('PROTON_NO_ESYNC', None)
     subprocess.run([launcher, exe, 'argument with spaces'], env=env, check=True)

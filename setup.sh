@@ -51,7 +51,12 @@ check_tools() {
   [[ -f /usr/lib/wine/x86_64-windows/libkernel32.a ]]
 }
 check_umu() { [[ -x "$UMU_RUN" && -d "$PROTONPATH/files/bin" ]]; }
-check_prefix() { [[ -d "$PFX/drive_c" ]]; }
+# A prefix whose registry lacks the CLSID keys (or has under 5000 keys) was created by a wineserver that started before Proton copied its default registry in
+# (installers then fail with status 5), so "drive_c exists" is not enough.
+check_prefix() {
+  [[ -d "$PFX/drive_c" && -f "$PFX/system.reg" ]] && grep -q -a -F '[Software\\Classes\\CLSID\\' "$PFX/system.reg" &&
+    (( $(grep -c -a '^\[' "$PFX/system.reg") >= ${SM4L_MIN_REG_KEYS:-5000} ))   # a healthy fresh prefix has about 17,000 keys, a clobbered one about 80
+}
 check_dotnet() { [[ -f "$PFX/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/RegAsm.exe" ]]; }
 # Done only when setup.exe has the pinned hash and every file of the vendor manifest is there with the right total size
 # (so a copy that is still running does not count). Once the platform is installed the media may have been trimmed.
@@ -91,11 +96,12 @@ check_menu() { [[ -f "$HOME/.local/share/applications/SM4L-solidworks.desktop" ]
 
 act_tools() { echo "Install the host tools listed in docs/INSTALL.md, step 2, then run this again."; return 1; }
 act_umu() { echo "Install umu-run and UMU-Proton-10.0-4, as in docs/INSTALL.md, step 4."; return 1; }
-act_prefix() { "$LAUNCH" "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0; }
+act_prefix() { "$LAUNCH" --oneshot "$PROTONPATH/files/lib/wine/x86_64-windows/cmd.exe" /c exit 0; }
 act_dotnet() {
   ask "Install .NET 4.8 with winetricks? It downloads from the network." || { echo "Skipped."; return 1; }
-  "$UMU_RUN" winetricks -q dotnet48
+  "$UMU_RUN" winetricks -q dotnet48 || true   # umu-run's exit status is unreliable: judge by the result below
   stop_prefix
+  check_dotnet || { echo "winetricks finished but RegAsm.exe is missing: .NET 4.8 did not install (see docs/TROUBLESHOOTING.md)." >&2; return 1; }
 }
 act_media() {
   echo "Get the vendor ZIP (docs/DOWNLOAD.md), extract it, then set MEDIA_1 to the folder with setup.exe."
