@@ -18,7 +18,7 @@ SM4L is not affiliated with, endorsed by, or supported by Dassault Systèmes, SO
 
 ## Reference machines
 
-SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on kernel 7.2.8-1-cachyos, with KDE Plasma on Wayland, UMU 1.4.4 and UMU-Proton-10.0-4, and both run **SOLIDWORKS Design Professional for Makers 2026 SP3.0**.
+SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on kernel 7.2.8-1-cachyos, with KDE Plasma on Wayland, UMU 1.4.4 and UMU-Proton-10.0-4, and both run **SOLIDWORKS Design Professional for Makers 2026 SP3.0** (the desktop's window title is still to be confirmed).
 
 - **Laptop:** Intel Mesa graphics (`Mesa Intel(R) Graphics (MTL)`), with a 3Dconnexion SpaceMouse Pro. This is the machine the guide was written on.
 - **Desktop:** NVIDIA GeForce RTX 2070 SUPER, with driver `595.104.02` (open kernel module). The AMD iGPU is present but unused by CAD. It has a SpaceMouse Wireless at 2x the default sensitivity. It's a fresh install from [INSTALL.md](docs/INSTALL.md) on 2026-10-08.
@@ -64,8 +64,8 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 | The sldProcMon.exe startup crash | Open, harmless so far | Not investigated further |
 | The browser's Open click is still required | Open | Start CAD through the browser's Open button. Starting `sldworks.exe` directly doesn't skip the platform |
 | Embedded browser panels flash | Open | None yet. CAD still works while the panels flash |
-| Model rebuilds are slow | Open | In measured runs, most of the time goes to Wine window-system calls |
-| The cause of the header drift isn't identified | Open | The header hook in the UI add-in keeps the headers visible |
+| Rebuilds are still slower than native Windows | Open | Rebuilds are about 2.6x faster than before the speed fixes (median 52 ms on the laptop test part). The UI still spends most of its time in Wine window-system calls |
+| Header drift: SOLIDWORKS' layout isn't idempotent under Wine | Open | SOLIDWORKS' layout (offsetControl and resizeControls in slduiu.dll) isn't idempotent under Wine. The Wine-side root cause isn't identified, so the add-in pins the headers |
 | CAD has hung on exit once | Open | The cleanup in `addin/cad_cleanup.py` handles the stuck process. See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | Save As 3MF needs native msxml6 | Verified on both machines | Step 15 in [INSTALL.md](docs/INSTALL.md) |
 | Labels need the theme off | Verified on both machines | Step 14. The look is classic and flatter |
