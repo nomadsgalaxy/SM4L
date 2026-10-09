@@ -2,7 +2,7 @@
 
 This is the full path, in order. It's based on one working Arch Linux x86_64 laptop with an Intel GPU, set up in October 2026. Nobody has replayed it on a fresh machine yet, so check each step's result before you move on.
 
-`setup.sh` in the repository root runs the scriptable steps in this order, and `./setup.sh --plan` shows where you are. It's pending a live test, so this guide is the reference.
+`setup.sh` in the repository root runs the scriptable steps in this order. `./setup.sh --plan` shows where you are and changes nothing. The media step checks the vendor files before the installer runs, and the offline-patch step checks the patched copy byte for byte. It's pending a live test, so this guide is the reference.
 
 Every step ends with a check. If the check fails, stop and read [TROUBLESHOOTING.md](TROUBLESHOOTING.md) before going further.
 
@@ -140,6 +140,14 @@ python3 -B "$SM4L_ROOT/tests/test_patch_offline_installer.py" "$MEDIA_1"
 python3 -B "$SM4L_ROOT/setup/patch_offline_installer.py" "$MEDIA_1/setup.exe"
 "$LAUNCH" "$MEDIA_1/setup_admin_proton_offline.exe"
 ```
+
+Check the media before you patch anything:
+
+```bash
+python3 -B "$SM4L_ROOT/setup/media_check.py" "$MEDIA_1"
+```
+
+This checks `setup.exe`'s pinned SHA256, and that every file in the vendor manifest `0data/MediaContent.xml` exists in folders `1` to `7` under `MEDIA_1`'s parent. The supported release has 575 files, totalling 28,567,415,757 bytes. Until the platform is installed, all seven folders must be present. After the install, trimmed media is accepted, and only `setup.exe`'s hash is checked. For a full SHA256 pass over every file, which is slower, add `hashes`: `python3 -B "$SM4L_ROOT/setup/media_check.py" "$MEDIA_1" hashes`.
 
 The patch checks the whole file's hash first, then changes only the IE10 export check, in a separately named copy. It skips a false prerequisite check for the missing `HttpWebSocketReceive`. It doesn't implement WebSockets. The original media isn't touched, and the patched copy's signature is no longer valid.
 

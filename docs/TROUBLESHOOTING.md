@@ -120,6 +120,14 @@ Check the file's SHA256 against the original before you restore it. Don't restor
 
 If the headers still wipe, the add-in's kill switches (`C:\sm4l-hdr-nozorder-off` and `C:\sm4l-hdr-clamp-off`) can isolate which part is involved. Their default is on.
 
+## setup.sh says the media is incomplete
+
+**You see:** `setup.sh` stops at the media step and prints the reason.
+
+**Usual cause:** a file is missing from one of the seven numbered folders, the ZIP was extracted into the wrong place, or the `setup.exe` hash doesn't match the supported release.
+
+**Do this:** run `python3 -B setup/media_check.py "$MEDIA_1"` to see the failing file or hash. Re-extract the ZIP from the vendor download if a file is missing. Don't patch a file that fails the hash, because the patches refuse builds they don't know. The full SHA256 pass, `setup/media_check.py "$MEDIA_1" hashes`, is slower and optional.
+
 ## Save As 3MF crashes CAD
 
 **You see:** CAD crashes during Save As 3MF.

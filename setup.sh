@@ -53,8 +53,15 @@ check_tools() {
 check_umu() { [[ -x "$UMU_RUN" && -d "$PROTONPATH/files/bin" ]]; }
 check_prefix() { [[ -d "$PFX/drive_c" ]]; }
 check_dotnet() { [[ -f "$PFX/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/RegAsm.exe" ]]; }
-check_media() { [[ -f "${MEDIA_1:-/nonexistent}/setup.exe" ]]; }
-check_offline_patch() { [[ -f "${MEDIA_1:-/nonexistent}/setup_admin_proton_offline.exe" ]]; }
+# Done only when setup.exe has the pinned hash and every file of the vendor manifest is there with the right total size
+# (so a copy that is still running does not count). Once the platform is installed the media may have been trimmed.
+check_media() {
+  local extra=()
+  if check_platform; then extra=(--allow-pruned); fi
+  python3 -B "$root/setup/media_check.py" "${MEDIA_1:-/nonexistent}" media "${extra[@]}" >/dev/null 2>&1
+}
+# Done only when the patched copy is exactly what setup/patch_offline_installer.py makes from the original setup.exe.
+check_offline_patch() { python3 -B "$root/setup/media_check.py" "${MEDIA_1:-/nonexistent}" patch >/dev/null 2>&1; }
 check_platform() { [[ -f "${PLATFORM_BIN:-/nonexistent}/CATSysTS.dll" ]]; }
 # Done when the platform's CATSysTS.dll imports the proxy, or when its backup is there.
 check_dir_compat() {
@@ -93,6 +100,7 @@ act_dotnet() {
 act_media() {
   echo "Get the vendor ZIP (docs/DOWNLOAD.md), extract it, then set MEDIA_1 to the folder with setup.exe."
   pause "Waiting for the vendor media."
+  check_media || python3 -B "$root/setup/media_check.py" "${MEDIA_1:-/nonexistent}" media >&2 || true
   check_media
 }
 act_offline_patch() {

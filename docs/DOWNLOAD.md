@@ -70,7 +70,7 @@ If Dassault only offers you a different release, write down its filename. The pa
 
 ## 3. Check the download and extract it
 
-Let the download finish completely. My ZIP had 649 entries and unpacked to 28,567,505,049 bytes. The CAD download and the installed app need more space on top of that.
+Let the download finish completely. My ZIP had 649 entries and unpacked to 28,567,505,049 bytes. The media is seven numbered folders, `1` to `7`, side by side, and the media check needs all seven until the platform is installed. The CAD download and the installed app need more space on top of that.
 
 From the SM4L checkout:
 
