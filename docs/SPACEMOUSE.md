@@ -58,6 +58,29 @@ Stop any running manual bridge first. `--seconds` sets an optional test length. 
 
 The menu launcher also reads sensitivity from environment variables: `SM4L_SPACEMOUSE_PAN`, `SM4L_SPACEMOUSE_ROTATION`, `SM4L_SPACEMOUSE_ZOOM`, `SM4L_SPACEMOUSE_SMOOTHING` and `SM4L_SPACEMOUSE_INVERT`. For inversion, use comma-separated axis names from `x,y,z,rx,ry,rz`. An empty value turns inversion off.
 
+## Sensitivity per device
+
+The built-in defaults were tuned on the SpaceMouse Pro (`046d:c62b`). The SpaceMouse Wireless (USB `256f:c63a`) feels right at twice those values. Set that per device with a systemd drop-in for the bridge unit, so the change lives in your user units and survives `bin/install_units.sh`:
+
+```bash
+mkdir -p ~/.config/systemd/user/sm4l-spacemouse.service.d
+cat > ~/.config/systemd/user/sm4l-spacemouse.service.d/sensitivity.conf <<'CONF'
+[Service]
+Environment=SM4L_SPACEMOUSE_PAN=.00002 SM4L_SPACEMOUSE_ROTATION=.0004 SM4L_SPACEMOUSE_ZOOM=.00032
+CONF
+systemctl --user daemon-reload
+systemctl --user restart sm4l-spacemouse.service
+```
+
+The values are the Pro defaults doubled. On the desktop replication, the frame time with the NVIDIA GPU was 3 to 4 ms. Pick values that feel right for your device, and keep the drop-in when you reinstall the units.
+
+Tested devices:
+
+| Device | USB ID | Sensitivity | Status |
+| --- | --- | --- | --- |
+| SpaceMouse Pro | `046d:c62b` | built-in defaults | Tested on the reference laptop |
+| SpaceMouse Wireless | `256f:c63a` | drop-in above (2x) | Tested over USB on the desktop replication. Over Bluetooth it wasn't connected during the test |
+
 ## Add-in registration and updates
 
 The current DLL is `C:\sm4l-spacemouse-v3.dll`, COM class `{BB75177C-6799-4F57-9B75-10931D6421F6}`. The reader writes the class path and `ThreadingModel=Apartment` under `HKLM\Software\Classes\CLSID`, and the title and description under `HKLM\Software\SolidWorks\Addins`. Those are prefix registry entries, not anything on your Linux system. It loads through the supported API and accepts either success or already-loaded. No vendor DLLs are modified for this.

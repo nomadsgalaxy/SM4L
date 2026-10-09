@@ -110,8 +110,9 @@
         "The Fillet/Chamfer checkbox and radio labels and the section headers show correctly.",
         "The SpaceMouse works when it's connected by USB. The wireless model was asleep over Bluetooth during the run, so only the USB device was checked."
       ],
-      "open": [
-        "SpaceMouse sensitivity: the user says it feels a bit slow. It isn't yet known whether that's the sensitivity setting or added lag. sw-dev is checking."
+      "open": [],
+      "resolved": [
+        "SpaceMouse sensitivity: 2x the defaults feels right on the SpaceMouse Wireless over USB. It's applied as a systemd drop-in, and it's documented in SPACEMOUSE.md."
       ]
     }
   }
