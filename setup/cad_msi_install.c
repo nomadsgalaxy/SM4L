@@ -1,4 +1,5 @@
-// Diagnostic only: extract and CRC-check spatialiop.zip into INSTALLDIR/spiop/files first.
+// CAD install helper (INSTALL step 8, built by the commands in tests/test_cad_msi_build.py). Run setup/prepare_design_install.py first: it
+// extracts and CRC-checks spatialiop.zip into INSTALLDIR/spiop/files.
 // ponytail: pinned local 2026 SP3.0/default Steam profile; generalize only after CAD startup works.
 typedef unsigned short WCHAR;
 typedef unsigned HANDLE;

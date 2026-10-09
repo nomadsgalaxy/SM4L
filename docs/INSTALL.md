@@ -211,13 +211,15 @@ export CAD_DATA="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/users/steamuser/Dow
 export CAD_DIR="$SOLIDWORKS_PROTON_STATE/prefix/pfx/drive_c/Program Files/Dassault Systemes/SOLIDWORKS Apps 2026/SOLIDWORKS"
 ```
 
+If the download cache was copied from another machine, it can come with `solidworks-proton-preextracted.msi` already in the data folder. The script never overwrites or deletes that file, and it stops before it reads anything. Move the file aside, as `solidworks-proton-preextracted.msi.old`, and run the command again. The script then extracts `spatialiop.zip` and writes a fresh copy.
+
 `InstallSpatialIOP` failed on the reference machine, because the Windows ZIP-shell API returned `0x8000ffff`. The fix is to extract the real `spatialiop.zip` yourself, check every entry's CRC and size, and turn off only that extraction step in a separate copy of the MSI:
 
 ```bash
 python3 -B "$SM4L_ROOT/tests/test_prepare_design_install.py"
 python3 "$SM4L_ROOT/setup/prepare_design_install.py" "$CAD_DATA" "$CAD_DIR"
 clang --target=x86_64-pc-windows-msvc -O2 -Wall -Wextra -Werror -fno-builtin \
-  -c "$SM4L_ROOT/experiments/cad-msi-experiment.c" -o "$SOLIDWORKS_PROTON_STATE/cad-msi.obj"
+  -c "$SM4L_ROOT/setup/cad_msi_install.c" -o "$SOLIDWORKS_PROTON_STATE/cad-msi.obj"
 lld-link /entry:entry /subsystem:console /nodefaultlib /machine:x64 \
   "/out:$SOLIDWORKS_PROTON_STATE/cad-msi.exe" "$SOLIDWORKS_PROTON_STATE/cad-msi.obj" \
   /usr/lib/wine/x86_64-windows/libkernel32.a /usr/lib/wine/x86_64-windows/libmsi.a

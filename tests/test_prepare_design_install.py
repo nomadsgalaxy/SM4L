@@ -32,4 +32,20 @@ with tempfile.TemporaryDirectory() as directory:
         raise AssertionError('Unverified installer accepted')
     assert not (data / 'install').exists()
     assert not (data / 'solidworks-proton-preextracted.msi').exists()
-print('ZIP traversal/symlink and unsupported-build refusal checks passed')
+# An existing preextracted MSI (for example from a cache copied from another machine) is refused up front with a message that says
+# what to do, and is neither read, overwritten nor deleted.
+import prepare_design_install as module
+with tempfile.TemporaryDirectory() as directory:
+    data = Path(directory)
+    keep = data / 'solidworks-proton-preextracted.msi'
+    keep.write_bytes(b'from another machine')
+    try:
+        prepare(data, data / 'install')
+    except FileExistsError as error:
+        assert 'move it aside' in str(error) and str(keep) in str(error) and 'never overwrites or deletes' in str(error)
+    else:
+        raise AssertionError('Existing preextracted MSI accepted')
+    assert keep.read_bytes() == b'from another machine' and not (data / 'install').exists()
+    done = __import__('subprocess').run([__import__('sys').executable, str(Path(module.__file__)), str(data), str(data / 'install')], capture_output=True, text=True)
+    assert done.returncode == 1 and 'move it aside' in done.stderr and 'Traceback' not in done.stderr
+print('ZIP traversal/symlink, unsupported-build and existing-copy refusal checks passed')

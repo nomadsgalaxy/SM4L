@@ -21,14 +21,16 @@ def safe_members(infos):
 
 def prepare(data, install):
     data, install = Path(data), Path(install)
+    copy = data / 'solidworks-proton-preextracted.msi'
+    if copy.exists():
+        raise FileExistsError(
+            f'{copy} already exists. This script never overwrites or deletes it. If the download cache was copied from another '
+            f'machine it comes with one: move it aside (mv "{copy}" "{copy}.old") and run this again.')
     for name, expected in [('solidworks.msi', MSI_SHA), ('spatialiop.zip', ZIP_SHA)]:
         with (data / name).open('rb') as stream:
             if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
                 raise ValueError(f'Unsupported source: {name}')
     target = install / 'spiop/files'
-    copy = data / 'solidworks-proton-preextracted.msi'
-    if copy.exists():
-        raise FileExistsError(copy)
     # ponytail: one verified vendor build; inspect and pin each new release separately.
     with zipfile.ZipFile(data / 'spatialiop.zip') as archive:
         infos = safe_members(archive.infolist())
@@ -49,4 +51,7 @@ def prepare(data, install):
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         raise SystemExit('Usage: prepare_design_install.py DATA_DIRECTORY INSTALLED_SOLIDWORKS_DIRECTORY')
-    prepare(*sys.argv[1:])
+    try:
+        prepare(*sys.argv[1:])
+    except FileExistsError as error:
+        raise SystemExit(f'prepare_design_install: {error}')
