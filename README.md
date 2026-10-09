@@ -49,10 +49,10 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 - Saving a `.SLDPRT` and reopening it.
 - Save As 3MF.
 - The viewport with Enhanced graphics performance off.
+- The leftover-process cleanup after a normal CAD exit. It removed the leftover WebView2 and launcher processes and left the services and tray alone, verified on the desktop on 2026-10-08.
 
 **Pending confirmation**
 
-- The leftover-process cleanup is enabled. It hasn't yet acted on a real CAD exit.
 - The theme setting is re-applied before each start by `setup/ensure_theme_off.py`. That isn't confirmed in a real start yet.
 
 ## Known issues

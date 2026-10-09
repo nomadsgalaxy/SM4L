@@ -206,6 +206,14 @@ Judge the .NET step by `RegAsm.exe` existing, not by the exit status of `umu-run
 pgrep -af 'sldworks|SWXDesktopLauncher|CATSTART'
 ```
 
+## CAD is very slow, or it's swapped out
+
+**You see:** CAD stops responding for long stretches, or a large assembly is very slow, even though the graphics work.
+
+**Usual cause:** memory pressure. On CachyOS, the default zram swap plus several Electron or Chromium apps can push SOLIDWORKS into swap. One case showed `sldworks.exe` with 2.9 GB in swap and only about 1 GB resident, during a slow large assembly.
+
+**Do this:** close the heavy apps, such as browsers and Electron apps, then restart CAD. Check that swap use drops. For big assemblies, use SOLIDWORKS' Large Assembly Settings and lightweight components, which reduce what CAD has to keep loaded.
+
 ## Where the logs are
 
 - Launch logs: under the state directory, in a `logs/run-*` folder for each launch.

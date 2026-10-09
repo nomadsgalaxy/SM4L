@@ -483,7 +483,7 @@ Confirm the edition that's running, that sketch planes show up, and that you can
 
 On the reference machine these have been confirmed: sketching, extruding, chamfering and rotating; SpaceMouse navigation; checkbox and radio labels with the theme off; the PropertyManager section headers through drag and resize; and Save As 3MF, verified once.
 
-These are not confirmed yet: saving a `.SLDPRT` and reopening it, the default-on status-bar dedupe after a restart, the leftover-process cleanup on a real CAD exit, and the theme-off re-apply in a real start. Embedded browser panels still flash.
+These are not confirmed yet: the theme-off re-apply in a real start. Embedded browser panels still flash.
 
 A splash screen or a running process doesn't count as a successful install.
 
