@@ -4,6 +4,14 @@ Each problem below lists what you'll see, the usual cause, and what to do. Start
 
 Keep the prefix's logs local. They can contain sign-in URLs and tickets.
 
+## Platform install fails with 1603
+
+**You see:** the platform installer fails with error 1603. `Errors.log` names `SWXDesktopInsSWK:SWXDesktopInsSWKInstall`, and the failure is at `InstallSpatialIOP`, with `SHBindToObject failed - HRESULT: 0x80070002`, then "Unzip failed", then a rollback.
+
+**Usual cause:** the platform installer was set to the automatic upgrade type (`SWXDesktopInsUpgradeType_SingleAutomatic`). That makes it run the SOLIDWORKS MSI in the same pass, and the Windows ZIP-shell path fails there.
+
+**Do this:** run the platform install again with **updates on demand** (MultiManual) selected. Don't choose the automatic option. Then install CAD through Installation Manager in [INSTALL.md](INSTALL.md), step 8, which has the workaround for `InstallSpatialIOP`.
+
 ## After a CAD crash, nothing starts cleanly
 
 **You see:** CAD dies about 25 seconds after it starts, or new launches stall, after an earlier crash.

@@ -168,6 +168,8 @@ The patch checks the whole file's hash first, then changes only the IE10 export 
 
 Use the administrator entry point, `setup_admin_proton_offline.exe`. `setup_noUAC.exe` ran into a vendor elevation error on the reference machine.
 
+> **Warning: choose "updates on demand" (MultiManual). Do not use the "automatic" option.** The automatic upgrade type (`SWXDesktopInsUpgradeType_SingleAutomatic`) makes the platform installer run the SOLIDWORKS MSI in the same pass. That fails with error 1603 at `InstallSpatialIOP`, and the install rolls back. CAD comes from Installation Manager in step 8, with the workaround there. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md), "Platform install fails with 1603".
+
 On the reference machine I selected W4Y (3DEXPERIENCE SOLIDWORKS Ultimate), default install directory, updates on demand. The same prefix later launched Professional for Makers with the account's license. Choose the edition your license covers. The guide doesn't claim a route to a different tier.
 
 **Check:** the installer finishes, and the platform directory exists:

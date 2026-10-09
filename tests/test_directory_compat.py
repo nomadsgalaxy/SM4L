@@ -43,7 +43,7 @@ if len(sys.argv)>1:
         apply(target,_paths.ROOT/'setup'/'swcompat.dll')
         assert target.read_bytes()==out
         assert target.with_name('CATSysTS.dll.pre-swcompat').read_bytes()==data
-        assert (target.parent/'swcompat.dll').read_bytes()==_paths.ROOT/'setup'/'swcompat.dll'.read_bytes()
+        assert (target.parent/'swcompat.dll').read_bytes()==(_paths.ROOT/'setup'/'swcompat.dll').read_bytes()
         try: apply(target,_paths.ROOT/'setup'/'swcompat.dll')
         except ValueError: pass
         else: raise AssertionError('Patched an already changed DLL')
