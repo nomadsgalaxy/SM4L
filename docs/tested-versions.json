@@ -40,7 +40,7 @@
   },
   "own_proxy_sha256": "bcd3e25552460fbc5eb6db0354d3dc1b2e1153ad8c9720c0a6e9200896555771",
   "space_mouse_device": "3Dconnexion SpaceMouse Pro USB 046d:c62b",
-  "space_mouse_evidence": "Anthony confirmed smooth navigation and correct tilt after the in-process batched redraw fix; focused view updates measured 14\u201318 ms",
+  "space_mouse_evidence": "Anthony confirmed smooth navigation and correct tilt after the in-process batched redraw fix; focused view updates measured 14–18 ms",
   "space_mouse_buttons_verified": false,
   "start_menu_verified": true,
   "space_mouse_addin": {
@@ -53,5 +53,54 @@
     "input_hz": 30,
     "buttons_mapped": false,
     "final_tuning_verified": true
+  },
+  "second_machine_replication": {
+    "date": "2026-10-08",
+    "description": "First fresh-prefix replication on a second machine, and the first run on an NVIDIA GPU. Reported by the desktop replication.",
+    "machine": {
+      "os": "CachyOS, kernel 7.2.8-1-cachyos",
+      "desktop": "KDE Plasma on Wayland (KWin)",
+      "cpu_cores": 24,
+      "ram_gb": 30,
+      "cad_gpu": "NVIDIA GeForce RTX 2070 SUPER (TU104)",
+      "other_gpu": "AMD Granite Ridge iGPU, not used by CAD",
+      "display_path": "winex11 through XWayland"
+    },
+    "drivers": {
+      "nvidia-production-open-dkms": "595.104.02-1",
+      "nvidia-production-utils": "595.104.02-1",
+      "mesa": "3:26.2.4-1",
+      "vulkan-radeon": "3:26.2.4-1",
+      "note": "glxinfo isn't installed, so no GL renderer string was recorded."
+    },
+    "pins": {
+      "umu": "1.4.4 zipapp, same SHA256 as the laptop",
+      "proton": "UMU-Proton-10.0-4 (1774856027)",
+      "runtime": "sniper 3.0.20260928.262393",
+      "wine_import_libs": "11.18-1.1",
+      "python": "3.14.7-2",
+      "lld": "23.1.1-1.1",
+      "spacenavd": "1.3.1-1",
+      "libspnav": "1.2-1.1",
+      "webview2": "154.0.4258.62, from the pinned installer",
+      "clang": "23.1.1-2 (laptop: pkgrel differs only)",
+      "firefox": "157.0-1 (laptop: pkgrel differs only)"
+    },
+    "vendor_pins_matched": [
+      "setup.exe",
+      "CATSysTS.dll",
+      "solidworks.msi",
+      "spatialiop.zip",
+      "comctl32.dll",
+      "swcompat.dll (own proxy)"
+    ],
+    "platform_install": {
+      "edition_selected": "XWB only; W4Y not selected",
+      "update_choice": "updates on demand (MultiManual)",
+      "live_product": "to be confirmed from the window title"
+    },
+    "graphics": "Enhanced graphics performance OFF (Use Performance Pipeline 2020 = 0). The viewport works; the user reports it is smooth. Whether it was black before the change wasn't recorded.",
+    "add_ins_at_second_start": "header fix A and B on; swp dedupe armed; the PDM unhook logged result=0x1 error=0x0; the in-process SpaceMouse add-in connected. The SpaceMouse was a wireless Bluetooth device, and Bluetooth wasn't connected at the time.",
+    "step_18_results": "modeling, save and reopen, 3MF and SpaceMouse results will follow from the same run"
   }
 }
