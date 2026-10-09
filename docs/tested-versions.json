@@ -90,9 +90,9 @@
       "platform_install": {
         "edition_selected": "XWB only; W4Y not selected",
         "update_choice": "updates on demand (MultiManual)",
-        "live_product": "to be confirmed from the window title"
+        "live_product": "SOLIDWORKS Design Professional for Makers 2026 SP3.0"
       },
-      "live_product": "Professional for Makers (title to be confirmed)",
+      "live_product": "SOLIDWORKS Design Professional for Makers 2026 SP3.0",
       "fresh_install": "from INSTALL.md on 2026-10-08",
       "graphics": "Enhanced graphics performance OFF (Use Performance Pipeline 2020 = 0). The viewport works; the user reports it is smooth. Whether it was black before the change wasn't recorded.",
       "verified": [
@@ -103,7 +103,7 @@
         "Save and reopen, Save As 3MF, and the speed fixes in the README."
       ],
       "not_used_by_cad": "The AMD Granite Ridge iGPU is present but unused. AMD graphics is untested.",
-      "notes": "glxinfo isn't installed, so no GL renderer string was recorded. The live product was to be confirmed from the window title in its record."
+      "notes": "glxinfo isn't installed, so no GL renderer string was recorded."
     }
   ],
   "untested": [

@@ -18,7 +18,7 @@ SM4L is not affiliated with, endorsed by, or supported by Dassault Systèmes, SO
 
 ## Reference machines
 
-SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on kernel 7.2.8-1-cachyos, with KDE Plasma on Wayland, UMU 1.4.4 and UMU-Proton-10.0-4, and both run **SOLIDWORKS Design Professional for Makers 2026 SP3.0** (the desktop's window title is still to be confirmed).
+SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on kernel 7.2.8-1-cachyos, with KDE Plasma on Wayland, UMU 1.4.4 and UMU-Proton-10.0-4, and both run **SOLIDWORKS Design Professional for Makers 2026 SP3.0**.
 
 - **Laptop:** Intel Mesa graphics (`Mesa Intel(R) Graphics (MTL)`), with a 3Dconnexion SpaceMouse Pro. This is the machine the guide was written on.
 - **Desktop:** NVIDIA GeForce RTX 2070 SUPER, with driver `595.104.02` (open kernel module). The AMD iGPU is present but unused by CAD. It has a SpaceMouse Wireless at 2x the default sensitivity. It's a fresh install from [INSTALL.md](docs/INSTALL.md) on 2026-10-08.
