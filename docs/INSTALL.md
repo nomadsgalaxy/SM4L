@@ -128,7 +128,16 @@ WINEPREFIX="$SOLIDWORKS_PROTON_STATE/prefix/pfx" "$PROTONPATH/files/bin/wineserv
 pwine 'C:\windows\Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe' /?
 ```
 
-The `winecfg` call runs and exits 0 on a fresh prefix. On a scratch prefix it didn't leave a `win11` value in `user.reg`, because the Proton default may already be the target version, so this step shows only that the command returns. The `reg.exe` and `RegAsm` lines keep `pwine`, which returns on its own. Each `pwine` call starts a Wine server when none is running, and that server writes `user.reg` when it exits, so keep the `wineserver -k` line after the registry blocks.
+The `winecfg` call sets the prefix to Windows 11. Check it with the build number, which is the reliable value:
+
+```bash
+pwine reg.exe query 'HKLM\Software\Microsoft\Windows NT\CurrentVersion' /v CurrentBuild
+# expected: CurrentBuild    REG_SZ    22000  (ProductName is "Microsoft Windows 11")
+```
+
+The value is in `system.reg`, under `[Software\\Microsoft\\Windows NT\\CurrentVersion]`. A fresh prefix reports `19045` and "Windows 10 Pro" before the step, and `22000` and "Microsoft Windows 11" after it. Don't use `HKCU\Software\Wine` `Version` for this. It isn't set even on the working machine.
+
+Wine flushes the registry to `system.reg` and `user.reg` only when the prefix's server saves or exits. Read those files offline only after the server has stopped, or query the live server with `reg query` as above. The `reg.exe` and RegAsm lines keep `pwine`, which returns on its own. Each `pwine` call starts a Wine server when none is running, and that server writes the registry when it exits, so keep the `wineserver -k` line after the registry blocks.
 
 The media's own .NET 4.8.1 installer reported success without installing the 64-bit RegAsm, and the Login Manager registration still failed. Winetricks' .NET 4.8 recipe fixed it.
 

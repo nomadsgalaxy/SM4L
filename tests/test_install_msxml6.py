@@ -19,6 +19,20 @@ assert changed and any(l.startswith(m.SECTION) for l in fresh) and fresh[-1] == 
 assert m.remove_override(new) == (base, True) and m.remove_override(base) == (base, False)
 assert m.has_override(new) and not m.has_override(base)
 
+# --check must fail (exit 1) until both the DLLs and the override are in place; setup.sh relies on the exit status.
+with tempfile.TemporaryDirectory() as tmp:
+    prefix = Path(tmp) / 'prefix' / 'pfx'
+    for folder in ('system32', 'syswow64'):
+        (prefix / 'drive_c' / 'windows' / folder).mkdir(parents=True)
+        (prefix / 'drive_c' / 'windows' / folder / 'msxml6.dll').write_bytes(b'stub')
+    (prefix / 'user.reg').write_text(''.join(base))
+    assert m.main([str(prefix), '--check']) == 1                                    # nothing installed
+    reg = prefix / 'user.reg'; reg.write_text(''.join(m.add_override(base)[0]))
+    assert m.main([str(prefix), '--check']) == 1                                    # override only, stub DLLs
+    reg.write_text(''.join(base))
+    (prefix / 'drive_c' / 'windows' / 'system32' / 'msxml6.dll').write_bytes(b'x')   # still not the pinned file
+    assert m.main([str(prefix), '--check']) == 1
+
 # Install / idempotence / rollback in a fake prefix.
 pkg = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.path.expanduser(f'~/.cache/winetricks/msxml6/{m.PACKAGE}'))
 if not pkg.exists():
@@ -31,7 +45,7 @@ with tempfile.TemporaryDirectory() as tmp:
     (prefix / 'user.reg').write_text(''.join(base))
     assert m.state_of(prefix) == (False, False)
     assert m.install(prefix, pkg) == 0
-    assert m.state_of(prefix) == (True, True)
+    assert m.state_of(prefix) == (True, True) and m.main([str(prefix), '--check']) == 0
     assert m.install(prefix, pkg) == 0                      # already installed: nothing changes
     assert (m.backup_dir(prefix) / 'system32-msxml6.dll').read_bytes() == b'stub-system32'
     try:

@@ -12,7 +12,7 @@ Other programs keep Wine's built-in msxml6 because the override is scoped to sld
 Usage: install_msxml6.py [PREFIX_DIR] [--package FILE] [--check | --rollback]
   PREFIX_DIR  default: the SM4L state prefix/pfx (same default as launch_proton.sh)
   --package   default: the file winetricks caches, ~/.cache/winetricks/msxml6/msxml6-KB2957482-enu-amd64.exe
-  --check     report what is installed, change nothing        --rollback  undo it (restores the backed-up stubs)"""
+  --check     report what is installed, change nothing; exits 0 only when the files and the override are both in place        --rollback  undo it (restores the backed-up stubs)"""
 import hashlib, os, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
@@ -178,7 +178,7 @@ def main(argv):
     if '--check' in flags:
         dlls, reg = state_of(prefix)
         print(f'msxml6 files installed: {dlls}; sldworks.exe override set: {reg}')
-        return 0
+        return 0 if dlls and reg else 1   # setup.sh relies on this exit status
     if server_running(prefix):
         sys.exit('install_msxml6: a wineserver is running for this prefix; stop it first (wineserver -k)')
     return rollback(prefix) if '--rollback' in flags else install(prefix, package)
