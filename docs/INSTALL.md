@@ -487,6 +487,8 @@ These are not confirmed yet: saving a `.SLDPRT` and reopening it, the default-on
 
 A splash screen or a running process doesn't count as a successful install.
 
+**Tip: Z-up.** SOLIDWORKS has no single switch for Z-up. The way to get it is a Z-up part template: set the standard views with **Update Standard Views** in the part, then save it as the default part template. This isn't tested in SM4L yet.
+
 ## Checks
 
 These run without launching CAD:
