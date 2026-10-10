@@ -32,6 +32,8 @@ esac
 mkdir -p "$state/logs"
 log_dir="$(mktemp -d "$state/logs/run-XXXXXX")"
 export WINEPREFIX="$state/prefix" GAMEID=umu-default
+source "$(dirname -- "$(realpath -- "$0")")/gpu_env.sh"
+echo "$SM4L_GPU_NOTE" | tee -a "$log_dir/gpu.log" >&2
 # WebView2 bootstrap events need EVENT_MODIFY_STATE without SYNCHRONIZE.
 export PROTON_NO_FSYNC="${PROTON_NO_FSYNC:-1}" PROTON_NO_ESYNC="${PROTON_NO_ESYNC:-1}"
 # Pinned startup fixes are scoped to this dedicated prefix.

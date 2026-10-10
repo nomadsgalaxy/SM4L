@@ -214,6 +214,16 @@ pgrep -af 'sldworks|SWXDesktopLauncher|CATSTART'
 
 **Do this:** close the heavy apps, such as browsers and Electron apps, then restart CAD. Check that swap use drops. For big assemblies, use SOLIDWORKS' Large Assembly Settings and lightweight components, which reduce what CAD has to keep loaded.
 
+## CAD draws on the integrated GPU on a hybrid laptop
+
+**You see:** on a laptop with both an integrated GPU and an NVIDIA GPU, CAD runs on the integrated one, even though the NVIDIA GPU is available.
+
+**Usual cause:** Wine's OpenGL goes to the GPU that drives the display, unless NVIDIA's render offload is asked for.
+
+**Do this:** `bin/launch_proton.sh` sources `bin/gpu_env.sh`. The default, `SM4L_GPU=auto`, sets NVIDIA's render offload variables only on a hybrid laptop, where the NVIDIA GPU has no connected display. It never overrides variables you've set yourself. Use `SM4L_GPU=nvidia` to force it, or `SM4L_GPU=none` to leave the choice alone. Each launch writes one line to `gpu.log` in its run folder, saying what it did.
+
+This is new and not yet verified on a hybrid laptop. It's a no-op on the two reference machines. Check `gpu.log` before you rely on it.
+
 ## Where the logs are
 
 - Launch logs: under the state directory, in a `logs/run-*` folder for each launch.
