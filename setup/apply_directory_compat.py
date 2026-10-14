@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import tempfile
 import time
-from build_directory_compat import patched_bytes, SOURCE_SHA256
+from build_directory_compat import patched_bytes, SOURCE_SHA256, HF59_SOURCE_SHA256
 from inspect_payload import pe_imports
 
 
@@ -44,7 +44,7 @@ def main():
     if a.watch_for_recopy:
         for _ in range(900):
             try:
-                if hashlib.sha256(a.target.read_bytes()).hexdigest()==SOURCE_SHA256: break
+                if hashlib.sha256(a.target.read_bytes()).hexdigest() in (SOURCE_SHA256, HF59_SOURCE_SHA256): break
             except FileNotFoundError: pass
             time.sleep(1)
         else: p.error('No verified original DLL appeared within 15 minutes')

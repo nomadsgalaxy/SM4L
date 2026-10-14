@@ -6,9 +6,10 @@ import subprocess
 from inspect_payload import pe_imports
 
 SOURCE_SHA256='acfb5354bf75164f1e81def14e856aa50004bfb365dea165dcb93c1f6c7b8f35'
+HF59_SOURCE_SHA256='1786dbca6b75a66d5cb7156b797135b44a0ccfeaff12780d89a92989175bc559'
 
 def patched_bytes(data):
-    if hashlib.sha256(data).hexdigest()!=SOURCE_SHA256:
+    if hashlib.sha256(data).hexdigest() not in (SOURCE_SHA256, HF59_SOURCE_SHA256):
         raise ValueError('Unsupported CATSysTS build; refusing to patch')
     old=b'KERNEL32.dll\0'; new=b'swcompat.dll\0'
     if data.count(old)!=1:

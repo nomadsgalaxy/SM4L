@@ -4,6 +4,20 @@ Each problem below lists what you'll see, the usual cause, and what to do. Start
 
 Keep the prefix's logs local. They can contain sign-in URLs and tickets.
 
+## HF5.9 update or startup fails
+
+Use [HF5.9.md](HF5.9.md) for the complete tested checkpoint and source patches. Work in a copied prefix and runtime first; close CAD normally before changing its launcher or Wine server.
+
+- `UnzipInt` / `hr=S_FALSE`: the updater needs Wine ZIP-folder shell automation. Verify the patched 64-bit shell32 is loaded for the launcher.
+- IE10 required: changing IE registry versions doesn't satisfy a missing WinINet export. The existing checksum-guarded bootstrap workaround matches the tested HF5.9 setup; it does not implement WebSockets.
+- Elevated command prompt required: the manual trial used the separately named admin bootstrap. Direct no-UAC startup needs the real launcher's elevation context.
+- Missing CAFS file: retain the launcher's actual `--multi` input and its cache/download settings. Never publish the response JSON; it contains authentication data.
+- `Compilation of OM dictionaries failed: rc=1`: check whether the update recopied CATSysTS. The HF5.9 stock hash is now supported by the guarded helper and watcher; preserve the matching original backup. Unknown hashes must still be refused.
+- `InternetSetCookieEx2` missing: the tested Wine patch supplies the cookie API; skipping the call is not equivalent.
+- `cannot load JS0PCC.dll` followed by a null call: the observed HF5.9 loader required private ntdll static-TLS registration. The experimental patch provides real registration and release. This error alone does not establish a failed license entitlement.
+
+The successful copy's dictionary action and final installer close both returned 0, and a CAD assembly rendered. DisplayVersion, a splash screen or a listening TCP socket alone doesn't establish that result. HF5.9 save/reopen and broader stability remain unverified.
+
 ## Platform install fails with 1603
 
 **You see:** the platform installer fails with error 1603. `Errors.log` names `SWXDesktopInsSWK:SWXDesktopInsSWKInstall`, and the failure is at `InstallSpatialIOP`, with `SHBindToObject failed - HRESULT: 0x80070002`, then "Unzip failed", then a rollback.

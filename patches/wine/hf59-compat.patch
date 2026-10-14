@@ -1,0 +1,1267 @@
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index bc71fe0..1c383e7 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1459,6 +1459,58 @@ static void free_tls_slot( LDR_DATA_TABLE_ENTRY *mod )
+ }
+ 
+ 
++#ifdef __x86_64__
++/* Manual PE loaders use this internal Windows entry to register static TLS. */
++NTSTATUS WINAPI wine_handle_tls_data( LDR_DATA_TABLE_ENTRY *mod )
++{
++    const IMAGE_TLS_DIRECTORY *dir;
++    NTSTATUS status;
++    ULONG size;
++
++    if (!mod || !mod->DllBase) return STATUS_INVALID_PARAMETER;
++    if (!(dir = RtlImageDirectoryEntryToData( mod->DllBase, TRUE, IMAGE_DIRECTORY_ENTRY_TLS, &size )))
++        return STATUS_INVALID_IMAGE_FORMAT;
++    if (size < sizeof(*dir) || dir->EndAddressOfRawData < dir->StartAddressOfRawData ||
++        !dir->AddressOfIndex) return STATUS_INVALID_IMAGE_FORMAT;
++
++    RtlEnterCriticalSection( &loader_section );
++    status = alloc_tls_slot( mod ) ? STATUS_SUCCESS : STATUS_NO_MEMORY;
++    if (!status) mod->TlsIndex = -1;
++    RtlLeaveCriticalSection( &loader_section );
++    return status;
++}
++
++void WINAPI wine_release_tls_entry( LDR_DATA_TABLE_ENTRY *mod, ULONG flags )
++{
++    if (!mod || !mod->DllBase) return;
++    RtlEnterCriticalSection( &loader_section );
++    free_tls_slot( mod );
++    mod->TlsIndex = 0;
++    RtlLeaveCriticalSection( &loader_section );
++}
++
++/* shortcut: x64 private-loader discovery layout; revisit for other architectures. */
++__asm__( ".text\n"
++         ".balign 16,0xcc\n.fill 16,1,0xcc\n"
++         ".globl LdrpHandleTlsData\nLdrpHandleTlsData:\n"
++         "jmp wine_handle_tls_data\n"
++         ".balign 16,0xcc\n.fill 16,1,0xcc\n"
++         ".L_tls_discovery:\n"
++         "lea .L_tls_name(%rip),%rdx\nret\n"
++         ".balign 16,0xcc\n.fill 16,1,0xcc\n"
++         ".globl LdrpReleaseTlsEntry\nLdrpReleaseTlsEntry:\n"
++         "mov %rbx,8(%rsp)\npush %rdi\nsub $32,%rsp\n"
++         "mov %rdx,%rdi\nmov %rcx,%rbx\ntest %rdx,%rdx\n"
++         ".byte 0x75,0x0c\n.fill 12,1,0x90\n"
++         "call wine_release_tls_entry\n"
++         "mov 48(%rsp),%rbx\nadd $32,%rsp\npop %rdi\nret\n"
++         ".section .rdata,\"dr\"\n"
++         ".L_tls_name:\n.asciz \"LdrpHandleTlsData\"\n.balign 4\n"
++         ".rva LdrpHandleTlsData\n.long 0\n.rva .L_tls_discovery\n"
++         ".text\n" );
++#endif
++
++
+ /****************************************************************
+  *       fixup_imports_ilonly
+  *
+diff --git a/dlls/ntdll/ntdll.spec b/dlls/ntdll/ntdll.spec
+index 8d6676b..83c7721 100644
+--- a/dlls/ntdll/ntdll.spec
++++ b/dlls/ntdll/ntdll.spec
+@@ -75,6 +75,8 @@
+ @ stdcall -norelay -arch=arm64ec KiUserEmulationDispatcher(ptr)
+ @ stdcall -norelay KiUserExceptionDispatcher(ptr ptr)
+ # @ stub LdrAccessOutOfProcessResource
++@ stdcall -norelay -arch=x86_64 LdrpHandleTlsData(ptr)
++@ stdcall -norelay -arch=x86_64 LdrpReleaseTlsEntry(ptr long)
+ @ stdcall LdrAccessResource(long ptr ptr ptr)
+ @ stdcall LdrAddDllDirectory(ptr ptr)
+ @ stdcall LdrAddRefDll(long ptr)
+diff --git a/dlls/shell32/Makefile.in b/dlls/shell32/Makefile.in
+index 4a906ac..b91a75c 100644
+--- a/dlls/shell32/Makefile.in
++++ b/dlls/shell32/Makefile.in
+@@ -1,7 +1,8 @@
+ EXTRADEFS = -D_SHELL32_
+ MODULE    = shell32.dll
+ IMPORTLIB = shell32
+-IMPORTS   = uuid shlwapi user32 gdi32 advapi32
++IMPORTS   = $(ZLIB_PE_LIBS) uuid shlwapi user32 gdi32 advapi32
++EXTRAINCL = $(ZLIB_PE_CFLAGS)
+ DELAYIMPORTS = ole32 oleaut32 shdocvw version comctl32 comdlg32 gdiplus
+ 
+ SOURCES = \
+@@ -94,4 +95,5 @@ SOURCES = \
+ 	shlview.c \
+ 	shlview_cmenu.c \
+ 	shpolicy.c \
+-	systray.c
++	systray.c \
++	zipfolder.c
+diff --git a/dlls/shell32/shelldispatch.c b/dlls/shell32/shelldispatch.c
+index dd58c75..bddbe3b 100644
+--- a/dlls/shell32/shelldispatch.c
++++ b/dlls/shell32/shelldispatch.c
+@@ -33,6 +33,7 @@
+ 
+ #include "shell32_main.h"
+ #include "pidl.h"
++#include "zipfolder.h"
+ 
+ #include "wine/debug.h"
+ 
+@@ -65,6 +66,7 @@ typedef struct {
+     IShellFolder2 *folder;
+     PIDLIST_ABSOLUTE pidl;
+     BSTR path;
++    struct shell_zip *zip;
+ } FolderImpl;
+ 
+ typedef struct {
+@@ -1078,6 +1080,12 @@ static HRESULT WINAPI FolderItemImpl_get_Name(FolderItem2 *iface, BSTR *name)
+ 
+     *name = NULL;
+ 
++    if (This->folder->zip)
++    {
++        *name = SysAllocString(PathFindFileNameW(This->path ? This->path : This->folder->path));
++        return *name ? S_OK : E_OUTOFMEMORY;
++    }
++
+     if (This->path)
+         hr = SHParseDisplayName(This->path, NULL, &pidl, 0, NULL);
+     else
+@@ -1304,10 +1312,19 @@ static HRESULT FolderItem_Constructor(FolderImpl *folder, const WCHAR *path, Fol
+     if (path)
+         This->path = wcsdup(path);
+ 
++    if (path && !This->path)
++    {
++        free(This);
++        return E_OUTOFMEMORY;
++    }
++
+     This->folder = folder;
+     Folder3_AddRef(&folder->Folder3_iface);
+ 
+-    if (SHParseDisplayName(This->path, NULL, &pidl, ~0u, &This->attributes) == S_OK)
++    if (folder->zip)
++        This->attributes = path ? shell_zip_attributes(folder->zip, path + SysStringLen(folder->path) + 1)
++                : SFGAO_FOLDER | SFGAO_BROWSABLE;
++    else if (SHParseDisplayName(This->path, NULL, &pidl, ~0u, &This->attributes) == S_OK)
+         ILFree(pidl);
+ 
+     *item = (FolderItem *)&This->FolderItem2_iface;
+@@ -1437,7 +1454,7 @@ static HRESULT WINAPI FolderItemsImpl_get_Count(FolderItems3 *iface, LONG *count
+ 
+     TRACE("(%p,%p)\n", iface, count);
+ 
+-    *count = shellfolder_exists(This->folder->path) ? This->item_count : 0;
++    *count = This->folder->zip || shellfolder_exists(This->folder->path) ? This->item_count : 0;
+     return S_OK;
+ }
+ 
+@@ -1471,13 +1488,20 @@ static HRESULT WINAPI FolderItemsImpl_Item(FolderItems3 *iface, VARIANT var, Fol
+ 
+     *item = NULL;
+ 
+-    if (!shellfolder_exists(This->folder->path))
++    if (!This->folder->zip && !shellfolder_exists(This->folder->path))
+         return S_FALSE;
+ 
+     VariantInit(&index);
+     if (FAILED(hr = VariantCopyInd(&index, &var)))
+         return hr;
+ 
++    if (This->folder->zip && V_VT(&index) == VT_BSTR)
++    {
++        hr = Folder3_ParseName(&This->folder->Folder3_iface, V_BSTR(&index), item);
++        VariantClear(&index);
++        return hr;
++    }
++
+     switch (V_VT(&index))
+     {
+         case VT_I2:
+@@ -1633,6 +1657,29 @@ static HRESULT FolderItems_Constructor(FolderImpl *folder, FolderItems **ret)
+     Folder3_AddRef(&folder->Folder3_iface);
+ 
+     enumidlist = NULL;
++    if (folder->zip)
++    {
++        if (FAILED(hr = shell_zip_names(folder->zip, &This->item_names, &This->item_count))) goto failed;
++        for (i = 0; i < This->item_count; i++)
++        {
++            BSTR name = This->item_names[i];
++            unsigned int root = SysStringLen(folder->path), length = SysStringLen(name);
++            BSTR path = SysAllocStringLen(NULL, root + 1 + length);
++
++            if (!path)
++            {
++                hr = E_OUTOFMEMORY;
++                goto failed;
++            }
++            memcpy(path, folder->path, root * sizeof(WCHAR));
++            path[root] = '\\';
++            memcpy(path + root + 1, name, (length + 1) * sizeof(WCHAR));
++            SysFreeString(name);
++            This->item_names[i] = path;
++        }
++        *ret = (FolderItems *)&This->FolderItems3_iface;
++        return S_OK;
++    }
+     if (FAILED(hr = IShellFolder2_EnumObjects(folder->folder, NULL, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS,
+             &enumidlist)))
+     {
+@@ -1734,7 +1781,8 @@ static ULONG WINAPI FolderImpl_Release(Folder3 *iface)
+     {
+         ILFree(This->pidl);
+         SysFreeString(This->path);
+-        IShellFolder2_Release(This->folder);
++        if (This->folder) IShellFolder2_Release(This->folder);
++        shell_zip_close(This->zip);
+         IDispatch_Release(This->application);
+         free(This);
+     }
+@@ -1807,6 +1855,12 @@ static HRESULT WINAPI FolderImpl_get_Title(Folder3 *iface, BSTR *title)
+ 
+     *title = NULL;
+ 
++    if (This->zip)
++    {
++        *title = SysAllocString(PathFindFileNameW(This->path));
++        return *title ? S_OK : E_OUTOFMEMORY;
++    }
++
+     if (FAILED(hr = SHBindToParent(This->pidl, &IID_IShellFolder2, (void **)&parent, &last_part)))
+         return hr;
+ 
+@@ -1871,6 +1925,21 @@ static HRESULT WINAPI FolderImpl_ParseName(Folder3 *iface, BSTR name, FolderItem
+ 
+     *item = NULL;
+ 
++    if (This->zip)
++    {
++        unsigned int root = SysStringLen(This->path), length;
++
++        if (!name || !shell_zip_attributes(This->zip, name)) return S_FALSE;
++        length = SysStringLen(name);
++        if (!(path = SysAllocStringLen(NULL, root + 1 + length))) return E_OUTOFMEMORY;
++        memcpy(path, This->path, root * sizeof(WCHAR));
++        path[root] = '\\';
++        memcpy(path + root + 1, name, (length + 1) * sizeof(WCHAR));
++        hr = FolderItem_Constructor(This, path, item);
++        SysFreeString(path);
++        return hr;
++    }
++
+     if (FAILED(IShellFolder2_ParseDisplayName(This->folder, NULL, NULL, name, NULL, &pidl, NULL)))
+         return S_FALSE;
+ 
+@@ -1900,11 +1969,102 @@ static HRESULT WINAPI FolderImpl_MoveHere(Folder3 *iface, VARIANT item, VARIANT
+     return E_NOTIMPL;
+ }
+ 
++static HRESULT copy_folder_item(FolderImpl *destination, FolderItem *item, DWORD flags)
++{
++    SHFILEOPSTRUCTW operation = {0};
++    WCHAR *source, *target;
++    BSTR path;
++    HRESULT hr;
++    int result;
++
++    if (item->lpVtbl == (const FolderItemVtbl *)&FolderItemImpl_Vtbl)
++    {
++        FolderItemImpl *impl = impl_from_FolderItem((FolderItem2 *)item);
++        if (impl->folder->zip)
++            return shell_zip_copy(impl->folder->zip, impl->path
++                    ? impl->path + SysStringLen(impl->folder->path) + 1 : NULL, destination->path, flags);
++    }
++    if (FAILED(hr = FolderItem_get_Path(item, &path))) return hr;
++    source = calloc(SysStringLen(path) + 2, sizeof(WCHAR));
++    target = calloc(SysStringLen(destination->path) + 2, sizeof(WCHAR));
++    if (!source || !target)
++    {
++        free(source);
++        free(target);
++        SysFreeString(path);
++        return E_OUTOFMEMORY;
++    }
++    wcscpy(source, path);
++    wcscpy(target, destination->path);
++    SysFreeString(path);
++    operation.wFunc = FO_COPY;
++    operation.pFrom = source;
++    operation.pTo = target;
++    operation.fFlags = flags;
++    result = SHFileOperationW(&operation);
++    free(source);
++    free(target);
++    return result ? HRESULT_FROM_WIN32(result) : operation.fAnyOperationsAborted
++            ? HRESULT_FROM_WIN32(ERROR_CANCELLED) : S_OK;
++}
++
+ static HRESULT WINAPI FolderImpl_CopyHere(Folder3 *iface, VARIANT item, VARIANT options)
+ {
+-    FIXME("(%p,%s,%s)\n", iface, debugstr_variant(&item), debugstr_variant(&options));
++    FolderImpl *This = impl_from_Folder(iface);
++    FolderItems *items;
++    FolderItem *entry;
++    VARIANT value, option, index;
++    IUnknown *object;
++    DWORD flags = 0;
++    LONG count, i;
++    HRESULT hr;
+ 
+-    return E_NOTIMPL;
++    TRACE("(%p,%s,%s)\n", iface, debugstr_variant(&item), debugstr_variant(&options));
++
++    if (This->zip) return E_NOTIMPL;
++    VariantInit(&option);
++    if (V_VT(&options) != VT_EMPTY && V_VT(&options) != VT_ERROR)
++    {
++        if (FAILED(hr = VariantChangeType(&option, &options, 0, VT_I4))) return hr;
++        flags = V_I4(&option);
++        VariantClear(&option);
++    }
++    VariantInit(&value);
++    if (FAILED(hr = VariantCopyInd(&value, &item))) return hr;
++    if (V_VT(&value) == VT_BSTR)
++    {
++        if ((hr = FolderItem_Constructor(This, V_BSTR(&value), &entry)) == S_OK)
++        {
++            hr = copy_folder_item(This, entry, flags);
++            FolderItem_Release(entry);
++        }
++    }
++    else if ((V_VT(&value) == VT_DISPATCH || V_VT(&value) == VT_UNKNOWN) && V_UNKNOWN(&value))
++    {
++        object = V_UNKNOWN(&value);
++        if (IUnknown_QueryInterface(object, &IID_FolderItems, (void **)&items) == S_OK)
++        {
++            hr = FolderItems_get_Count(items, &count);
++            V_VT(&index) = VT_I4;
++            for (i = 0; SUCCEEDED(hr) && i < count; i++)
++            {
++                V_I4(&index) = i;
++                hr = FolderItems_Item(items, index, &entry);
++                if (hr != S_OK) break;
++                hr = copy_folder_item(This, entry, flags);
++                FolderItem_Release(entry);
++            }
++            FolderItems_Release(items);
++        }
++        else if ((hr = IUnknown_QueryInterface(object, &IID_FolderItem, (void **)&entry)) == S_OK)
++        {
++            hr = copy_folder_item(This, entry, flags);
++            FolderItem_Release(entry);
++        }
++    }
++    else hr = E_INVALIDARG;
++    VariantClear(&value);
++    return hr;
+ }
+ 
+ static HRESULT WINAPI FolderImpl_GetDetailsOf(Folder3 *iface, VARIANT item, int column, BSTR *str)
+@@ -2014,6 +2174,7 @@ static HRESULT Folder_Constructor(IShellFolder2 *folder, LPITEMIDLIST pidl, Fold
+     This->ref = 1;
+     This->folder = folder;
+     This->pidl = ILClone(pidl);
++    This->zip = NULL;
+ 
+     hr = SHBindToParent(pidl, &IID_IShellFolder2, (void **)&parent, &last_part);
+     IShellFolder2_GetDisplayNameOf(parent, last_part, SHGDN_FORPARSING, &strret);
+@@ -2183,6 +2344,33 @@ static HRESULT create_folder_for_pidl(LPITEMIDLIST pidl, Folder **ret)
+     return Folder_Constructor(folder, pidl, ret);
+ }
+ 
++static HRESULT zip_folder_constructor(const WCHAR *path, Folder **ret)
++{
++    FolderImpl *folder;
++    HRESULT hr;
++
++    if (!(folder = calloc(1, sizeof(*folder)))) return E_OUTOFMEMORY;
++    if ((hr = shell_zip_open(path, &folder->zip)) != S_OK)
++    {
++        free(folder);
++        return hr;
++    }
++    folder->Folder3_iface.lpVtbl = &FolderImpl_Vtbl;
++    folder->ref = 1;
++    folder->path = SysAllocString(path);
++    hr = IShellDispatch_Constructor(NULL, &IID_IDispatch, (void **)&folder->application);
++    if (!folder->path || FAILED(hr))
++    {
++        shell_zip_close(folder->zip);
++        SysFreeString(folder->path);
++        if (folder->application) IDispatch_Release(folder->application);
++        free(folder);
++        return FAILED(hr) ? hr : E_OUTOFMEMORY;
++    }
++    *ret = (Folder *)&folder->Folder3_iface;
++    return S_OK;
++}
++
+ static HRESULT WINAPI ShellDispatch_NameSpace(IShellDispatch6 *iface,
+         VARIANT dir, Folder **ret)
+ {
+@@ -2206,6 +2394,10 @@ static HRESULT WINAPI ShellDispatch_NameSpace(IShellDispatch6 *iface,
+ 
+             break;
+         case VT_BSTR:
++            if (V_BSTR(&dir) && !PathIsRelativeW(V_BSTR(&dir))
++                    && !wcsicmp(PathFindExtensionW(V_BSTR(&dir)), L".zip")
++                    && !(GetFileAttributesW(V_BSTR(&dir)) & FILE_ATTRIBUTE_DIRECTORY))
++                return zip_folder_constructor(V_BSTR(&dir), ret);
+             if (FAILED(hr = SHParseDisplayName(V_BSTR(&dir), NULL, &pidl, 0, NULL)))
+                 return S_FALSE;
+ 
+diff --git a/dlls/shell32/tests/shelldispatch.c b/dlls/shell32/tests/shelldispatch.c
+index 1038603..cc6c91d 100644
+--- a/dlls/shell32/tests/shelldispatch.c
++++ b/dlls/shell32/tests/shelldispatch.c
+@@ -1578,6 +1578,212 @@ static void test_ShellExecute(void)
+     IShellDispatch2_Release(sd);
+ }
+ 
++static void write_zip_fixture(const WCHAR *path, const BYTE *data, DWORD size)
++{
++    HANDLE file;
++    DWORD written;
++
++    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
++    ok(file != INVALID_HANDLE_VALUE, "Failed to create fixture: %lu\n", GetLastError());
++    if (file == INVALID_HANDLE_VALUE) return;
++    ok(WriteFile(file, data, size, &written, NULL) && written == size, "Failed to write fixture\n");
++    CloseHandle(file);
++}
++
++static void check_zip_file(const WCHAR *path, const char *expected)
++{
++    HANDLE file = INVALID_HANDLE_VALUE;
++    char buffer[32];
++    DWORD read;
++    unsigned int i;
++
++    /* CopyHere may complete asynchronously on Windows. */
++    for (i = 0; i < 50 && file == INVALID_HANDLE_VALUE; i++)
++    {
++        file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
++        if (file == INVALID_HANDLE_VALUE) Sleep(100);
++    }
++    ok(file != INVALID_HANDLE_VALUE, "Missing extracted file %s\n", wine_dbgstr_w(path));
++    if (file == INVALID_HANDLE_VALUE) return;
++    ok(ReadFile(file, buffer, sizeof(buffer), &read, NULL), "Failed to read extracted file\n");
++    ok(read == strlen(expected) && !memcmp(buffer, expected, read), "Unexpected extracted contents\n");
++    CloseHandle(file);
++}
++
++static void test_zip_folder(void)
++{
++    static const BYTE fixture[] =
++    {
++        0x50,0x4b,0x03,0x04,0x14,0,0,0,0,0,0xb8,0x90,0x4d,0x5d,0xe2,0x9c,
++        0x53,0xa5,7,0,0,0,7,0,0,0,8,0,0,0,0x72,0x6f,
++        0x6f,0x74,0x2e,0x74,0x78,0x74,0x73,0x74,0x6f,0x72,0x65,0x64,0x0a,0x50,0x4b,3,
++        4,0x14,0,0,0,8,0,0xb8,0x90,0x4d,0x5d,0x67,0xfb,0x8a,7,0x0b,
++        0,0,0,9,0,0,0,0x0c,0,0,0,0x64,0x69,0x72,0x2f,0x66,
++        0x69,0x6c,0x65,0x2e,0x74,0x78,0x74,0x4b,0x49,0x4d,0xcb,0x49,0x2c,0x49,0x4d,0xe1,
++        2,0,0x50,0x4b,1,2,0x14,3,0x14,0,0,0,0,0,0xb8,0x90,
++        0x4d,0x5d,0xe2,0x9c,0x53,0xa5,7,0,0,0,7,0,0,0,8,0,
++        0,0,0,0,0,0,0,0,0,0,0x80,1,0,0,0,0,
++        0x72,0x6f,0x6f,0x74,0x2e,0x74,0x78,0x74,0x50,0x4b,1,2,0x14,3,0x14,0,
++        0,0,8,0,0xb8,0x90,0x4d,0x5d,0x67,0xfb,0x8a,7,0x0b,0,0,0,
++        9,0,0,0,0x0c,0,0,0,0,0,0,0,0,0,0,0,
++        0x80,1,0x2d,0,0,0,0x64,0x69,0x72,0x2f,0x66,0x69,0x6c,0x65,0x2e,0x74,
++        0x78,0x74,0x50,0x4b,5,6,0,0,0,0,2,0,2,0,0x70,0,
++        0,0,0x62,0,0,0,0,0
++    };
++    static const BYTE empty[] = {0x50,0x4b,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
++    WCHAR temporary[MAX_PATH], root[MAX_PATH], zip_path[MAX_PATH], destination[MAX_PATH], path[MAX_PATH];
++    BYTE bad[sizeof(fixture)];
++    IShellDispatch *shell;
++    Folder *archive, *target;
++    FolderItems *items;
++    FolderItem *item;
++    VARIANT value, options, index;
++    VARIANT_BOOL is_folder;
++    BSTR name;
++    LONG count;
++    unsigned int i;
++    HRESULT hr;
++
++    hr = CoCreateInstance(&CLSID_Shell, NULL, CLSCTX_INPROC_SERVER, &IID_IShellDispatch, (void **)&shell);
++    ok(hr == S_OK, "Failed to create shell: %#lx\n", hr);
++    if (hr != S_OK) return;
++    GetTempPathW(MAX_PATH, temporary);
++    GetTempFileNameW(temporary, L"zip", 0, root);
++    DeleteFileW(root);
++    CreateDirectoryW(root, NULL);
++    swprintf(zip_path, ARRAY_SIZE(zip_path), L"%s\\test.zip", root);
++    swprintf(destination, ARRAY_SIZE(destination), L"%s\\out", root);
++    CreateDirectoryW(destination, NULL);
++    write_zip_fixture(zip_path, fixture, sizeof(fixture));
++    variant_set_string(&value, destination);
++    hr = IShellDispatch_NameSpace(shell, value, &target);
++    VariantClear(&value);
++    ok(hr == S_OK, "Failed to open destination: %#lx\n", hr);
++    if (hr != S_OK) goto cleanup;
++    variant_set_string(&value, zip_path);
++    hr = IShellDispatch_NameSpace(shell, value, &archive);
++    VariantClear(&value);
++    ok(hr == S_OK && archive, "Failed to open ZIP folder: %#lx\n", hr);
++    if (hr != S_OK) goto release_target;
++    hr = Folder_Items(archive, &items);
++    ok(hr == S_OK, "Failed to enumerate ZIP: %#lx\n", hr);
++    if (hr != S_OK) goto release_archive;
++    hr = FolderItems_get_Count(items, &count);
++    ok(hr == S_OK && count == 2, "Unexpected top-level count %ld, hr %#lx\n", count, hr);
++    variant_set_string(&index, L"dir");
++    hr = FolderItems_Item(items, index, &item);
++    VariantClear(&index);
++    ok(hr == S_OK, "Missing implicit directory: %#lx\n", hr);
++    if (hr == S_OK)
++    {
++        hr = FolderItem_get_IsFolder(item, &is_folder);
++        ok(hr == S_OK && is_folder == VARIANT_TRUE, "Expected a directory\n");
++        FolderItem_Release(item);
++    }
++    V_VT(&options) = VT_I4;
++    V_I4(&options) = 0x614;
++    V_VT(&value) = VT_DISPATCH;
++    V_DISPATCH(&value) = (IDispatch *)items;
++    hr = Folder_CopyHere(target, value, options);
++    ok(hr == S_OK, "CopyHere(collection) failed: %#lx\n", hr);
++    swprintf(path, ARRAY_SIZE(path), L"%s\\root.txt", destination);
++    check_zip_file(path, "stored\n");
++    swprintf(path, ARRAY_SIZE(path), L"%s\\dir\\file.txt", destination);
++    check_zip_file(path, "deflated\n");
++    variant_set_string(&index, L"root.txt");
++    hr = FolderItems_Item(items, index, &item);
++    VariantClear(&index);
++    ok(hr == S_OK, "Missing root file: %#lx\n", hr);
++    if (hr == S_OK)
++    {
++        hr = FolderItem_get_Name(item, &name);
++        ok(hr == S_OK && !wcscmp(name, L"root.txt"), "Unexpected item name\n");
++        SysFreeString(name);
++        swprintf(path, ARRAY_SIZE(path), L"%s\\root.txt", destination);
++        DeleteFileW(path);
++        V_DISPATCH(&value) = (IDispatch *)item;
++        hr = Folder_CopyHere(target, value, options);
++        ok(hr == S_OK, "CopyHere(item) failed: %#lx\n", hr);
++        check_zip_file(path, "stored\n");
++        FolderItem_Release(item);
++    }
++    FolderItems_Release(items);
++    Folder_Release(archive);
++
++    memcpy(bad, fixture, sizeof(bad));
++    bad[38] ^= 1;
++    write_zip_fixture(zip_path, bad, sizeof(bad));
++    variant_set_string(&value, zip_path);
++    hr = IShellDispatch_NameSpace(shell, value, &archive);
++    VariantClear(&value);
++    if (hr == S_OK)
++    {
++        hr = Folder_Items(archive, &items);
++        if (hr == S_OK)
++        {
++            V_VT(&value) = VT_DISPATCH;
++            V_DISPATCH(&value) = (IDispatch *)items;
++            Folder_CopyHere(target, value, options);
++            FolderItems_Release(items);
++        }
++        Folder_Release(archive);
++    }
++    swprintf(path, ARRAY_SIZE(path), L"%s\\root.txt", destination);
++    check_zip_file(path, "stored\n");
++
++    memcpy(bad, fixture, sizeof(bad));
++    for (i = 0; i + 12 <= sizeof(bad); i++)
++        if (!memcmp(bad + i, "dir/file.txt", 12)) memcpy(bad + i, "../evil_.txt", 12);
++    write_zip_fixture(zip_path, bad, sizeof(bad));
++    variant_set_string(&value, zip_path);
++    hr = IShellDispatch_NameSpace(shell, value, &archive);
++    VariantClear(&value);
++    ok(hr == S_FALSE && !archive, "Unsafe ZIP should be rejected, got %#lx\n", hr);
++    if (hr == S_OK) Folder_Release(archive);
++
++    write_zip_fixture(zip_path, fixture, sizeof(fixture) - 10);
++    variant_set_string(&value, zip_path);
++    hr = IShellDispatch_NameSpace(shell, value, &archive);
++    VariantClear(&value);
++    ok(hr == S_FALSE && !archive, "Truncated ZIP should be rejected, got %#lx\n", hr);
++    if (hr == S_OK) Folder_Release(archive);
++
++    write_zip_fixture(zip_path, empty, sizeof(empty));
++    variant_set_string(&value, zip_path);
++    hr = IShellDispatch_NameSpace(shell, value, &archive);
++    VariantClear(&value);
++    ok(hr == S_OK, "Failed to open empty ZIP: %#lx\n", hr);
++    if (hr == S_OK)
++    {
++        hr = Folder_Items(archive, &items);
++        ok(hr == S_OK, "Failed to enumerate empty ZIP: %#lx\n", hr);
++        if (hr == S_OK)
++        {
++            FolderItems_get_Count(items, &count);
++            ok(count == 0, "Empty ZIP contains %ld items\n", count);
++            FolderItems_Release(items);
++        }
++        Folder_Release(archive);
++    }
++    goto release_target;
++
++release_archive:
++    Folder_Release(archive);
++release_target:
++    Folder_Release(target);
++cleanup:
++    swprintf(path, ARRAY_SIZE(path), L"%s\\dir\\file.txt", destination);
++    DeleteFileW(path);
++    swprintf(path, ARRAY_SIZE(path), L"%s\\dir", destination);
++    RemoveDirectoryW(path);
++    swprintf(path, ARRAY_SIZE(path), L"%s\\root.txt", destination);
++    DeleteFileW(path);
++    RemoveDirectoryW(destination);
++    DeleteFileW(zip_path);
++    RemoveDirectoryW(root);
++    IShellDispatch_Release(shell);
++}
++
+ START_TEST(shelldispatch)
+ {
+     HRESULT r;
+@@ -1590,6 +1796,7 @@ START_TEST(shelldispatch)
+     init_function_pointers();
+     test_namespace();
+     test_items();
++    test_zip_folder();
+     test_service();
+     test_ShellFolderViewDual();
+     test_ShellWindows();
+diff --git a/dlls/wininet/cookie.c b/dlls/wininet/cookie.c
+index dd43485..d762257 100644
+--- a/dlls/wininet/cookie.c
++++ b/dlls/wininet/cookie.c
+@@ -1110,6 +1110,89 @@ DWORD WINAPI InternetSetCookieExW(LPCWSTR lpszUrl, LPCWSTR lpszCookieName,
+     return set_cookie(host, path, name, data, flags);
+ }
+ 
++/***********************************************************************
++ *           InternetSetCookieEx2 (WININET.@)
++ *
++ * Sets a cookie described by an INTERNET_COOKIE2 structure for the specified url.
++ */
++DWORD WINAPI InternetSetCookieEx2(const WCHAR *url, const INTERNET_COOKIE2 *cookie, const WCHAR *p3p_policy,
++        DWORD flags, DWORD *cookie_state)
++{
++    WCHAR expires[INTERNET_RFC1123_BUFSIZE];
++    substr_t host, path;
++    DWORD state, set_flags;
++    WCHAR *data;
++    size_t len;
++
++    TRACE("(%s, %p, %s, %lx, %p)\n", debugstr_w(url), cookie, debugstr_w(p3p_policy), flags, cookie_state);
++
++    if (cookie_state)
++        *cookie_state = COOKIE_STATE_UNKNOWN;
++    if (!url || !cookie || !cookie->pwszName)
++        return ERROR_INVALID_PARAMETER;
++    if (p3p_policy)
++        FIXME("P3P policy %s ignored\n", debugstr_w(p3p_policy));
++    if (flags & ~INTERNET_COOKIE_HTTPONLY)
++        FIXME("flags %lx not supported\n", flags);
++    if (cookie->dwFlags & ~(INTERNET_COOKIE_IS_SECURE | INTERNET_COOKIE_HTTPONLY))
++        FIXME("cookie flags %lx not supported\n", cookie->dwFlags);
++
++    if (!cookie_parse_url(url, &host, &path) || !host.len)
++        return ERROR_INVALID_PARAMETER;
++
++    if (cookie->fExpiresSet)
++    {
++        SYSTEMTIME st;
++
++        if (!FileTimeToSystemTime(&cookie->ftExpires, &st)
++                || !InternetTimeFromSystemTimeW(&st, INTERNET_RFC1123_FORMAT, expires, sizeof(expires)))
++            return ERROR_INVALID_PARAMETER;
++    }
++
++    /* Express the structure as a cookie string, so it gets the same parsing and domain checks as InternetSetCookieExW. */
++    len = (cookie->pwszValue ? wcslen(cookie->pwszValue) : 0) + 1;
++    if (cookie->pwszDomain)
++        len += ARRAY_SIZE(L"; domain=") + wcslen(cookie->pwszDomain);
++    if (cookie->pwszPath)
++        len += ARRAY_SIZE(L"; path=") + wcslen(cookie->pwszPath);
++    if (cookie->fExpiresSet)
++        len += ARRAY_SIZE(L"; expires=") + wcslen(expires);
++    len += ARRAY_SIZE(L"; secure") + ARRAY_SIZE(L"; httponly");
++    if (!(data = malloc(len * sizeof(WCHAR))))
++        return ERROR_NOT_ENOUGH_MEMORY;
++
++    wcscpy(data, cookie->pwszValue ? cookie->pwszValue : L"");
++    if (cookie->pwszDomain)
++    {
++        wcscat(data, L"; domain=");
++        wcscat(data, cookie->pwszDomain);
++    }
++    if (cookie->pwszPath)
++    {
++        wcscat(data, L"; path=");
++        wcscat(data, cookie->pwszPath);
++    }
++    if (cookie->dwFlags & INTERNET_COOKIE_IS_SECURE)
++        wcscat(data, L"; secure");
++    if (cookie->dwFlags & INTERNET_COOKIE_HTTPONLY)
++        wcscat(data, L"; httponly");
++    /* last: set_cookie copies everything after "expires=" into a fixed buffer */
++    if (cookie->fExpiresSet)
++    {
++        wcscat(data, L"; expires=");
++        wcscat(data, expires);
++    }
++
++    /* The structure marking the cookie HTTP-only is the caller's consent to store it as such. */
++    set_flags = (flags | cookie->dwFlags) & INTERNET_COOKIE_HTTPONLY;
++    state = set_cookie(host, path, substrz(cookie->pwszName), substrz(data), set_flags);
++    free(data);
++
++    if (cookie_state)
++        *cookie_state = state;
++    return state == COOKIE_STATE_ACCEPT ? ERROR_SUCCESS : ERROR_INVALID_OPERATION;
++}
++
+ /***********************************************************************
+  *           InternetSetCookieW (WININET.@)
+  *
+diff --git a/dlls/wininet/tests/internet.c b/dlls/wininet/tests/internet.c
+index f2579c4..47c37b1 100644
+--- a/dlls/wininet/tests/internet.c
++++ b/dlls/wininet/tests/internet.c
+@@ -761,6 +761,95 @@ static void test_complicated_cookie(void)
+   todo_wine ok(!ret, "InternetSetCookie succeeded\n");
+ }
+ 
++static void test_InternetSetCookieEx2(void)
++{
++    DWORD (WINAPI *pInternetSetCookieEx2)(const WCHAR *, const INTERNET_COOKIE2 *, const WCHAR *, DWORD, DWORD *);
++    INTERNET_COOKIE2 cookie = { 0 };
++    SYSTEMTIME st;
++    char buf[100];
++    DWORD size, state, res;
++    BOOL ret;
++
++    pInternetSetCookieEx2 = (void *)GetProcAddress(GetModuleHandleA("wininet.dll"), "InternetSetCookieEx2");
++    if (!pInternetSetCookieEx2)
++    {
++        win_skip("InternetSetCookieEx2 is not available.\n");
++        return;
++    }
++
++    res = pInternetSetCookieEx2(NULL, &cookie, NULL, 0, &state);
++    ok(res == ERROR_INVALID_PARAMETER, "got %lu\n", res);
++    res = pInternetSetCookieEx2(L"http://cookie.ex2.com/", NULL, NULL, 0, &state);
++    ok(res == ERROR_INVALID_PARAMETER, "got %lu\n", res);
++
++    /* session cookie */
++    cookie.pwszName = (WCHAR *)L"A";
++    cookie.pwszValue = (WCHAR *)L"one";
++    state = 0xdeadbeef;
++    res = pInternetSetCookieEx2(L"http://cookie.ex2.com/bar", &cookie, NULL, 0, &state);
++    ok(res == ERROR_SUCCESS, "got %lu\n", res);
++    ok(state == COOKIE_STATE_ACCEPT, "state %lu\n", state);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://cookie.ex2.com/bar", NULL, buf, &size);
++    ok(ret, "InternetGetCookie failed: %lu\n", GetLastError());
++    ok(!strcmp(buf, "A=one"), "data = %s\n", buf);
++
++    /* domain and path attributes */
++    cookie.pwszName = (WCHAR *)L"B";
++    cookie.pwszValue = (WCHAR *)L"two";
++    cookie.pwszDomain = (WCHAR *)L".ex2.com";
++    cookie.pwszPath = (WCHAR *)L"/only";
++    res = pInternetSetCookieEx2(L"http://cookie.ex2.com/", &cookie, NULL, 0, NULL);
++    ok(res == ERROR_SUCCESS, "got %lu\n", res);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://other.ex2.com/only/x", NULL, buf, &size);
++    ok(ret, "InternetGetCookie failed: %lu\n", GetLastError());
++    ok(!strcmp(buf, "B=two"), "data = %s\n", buf);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://other.ex2.com/elsewhere", NULL, buf, &size);
++    ok(!ret && GetLastError() == ERROR_NO_MORE_ITEMS, "got %x (%lu)\n", ret, GetLastError());
++
++    /* a domain the url can't set is not stored */
++    cookie.pwszName = (WCHAR *)L"C";
++    cookie.pwszDomain = (WCHAR *)L"unrelated.com";
++    cookie.pwszPath = NULL;
++    state = 0xdeadbeef;
++    res = pInternetSetCookieEx2(L"http://cookie.ex2.com/", &cookie, NULL, 0, &state);
++    ok(res != ERROR_SUCCESS, "got %lu\n", res);
++    ok(state != COOKIE_STATE_ACCEPT, "state %lu\n", state);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://unrelated.com/", NULL, buf, &size);
++    ok(!ret && GetLastError() == ERROR_NO_MORE_ITEMS, "got %x (%lu)\n", ret, GetLastError());
++
++    /* HTTP-only cookies are only returned with INTERNET_COOKIE_HTTPONLY */
++    cookie.pwszName = (WCHAR *)L"D";
++    cookie.pwszValue = (WCHAR *)L"four";
++    cookie.pwszDomain = NULL;
++    cookie.dwFlags = INTERNET_COOKIE_HTTPONLY;
++    res = pInternetSetCookieEx2(L"http://httponly.ex2.com/", &cookie, NULL, 0, NULL);
++    ok(res == ERROR_SUCCESS, "got %lu\n", res);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://httponly.ex2.com/", NULL, buf, &size);
++    ok(!ret && GetLastError() == ERROR_NO_MORE_ITEMS, "got %x (%lu)\n", ret, GetLastError());
++    size = sizeof(buf);
++    ret = InternetGetCookieExA("http://httponly.ex2.com/", NULL, buf, &size, INTERNET_COOKIE_HTTPONLY, NULL);
++    ok(ret, "InternetGetCookieEx failed: %lu\n", GetLastError());
++    ok(!strcmp(buf, "D=four"), "data = %s\n", buf);
++
++    /* an expiry in the past deletes the cookie */
++    cookie.pwszName = (WCHAR *)L"A";
++    cookie.pwszValue = (WCHAR *)L"gone";
++    cookie.dwFlags = 0;
++    GetSystemTime(&st);
++    st.wYear -= 1;
++    SystemTimeToFileTime(&st, &cookie.ftExpires);
++    cookie.fExpiresSet = TRUE;
++    pInternetSetCookieEx2(L"http://cookie.ex2.com/bar", &cookie, NULL, 0, NULL);
++    size = sizeof(buf);
++    ret = InternetGetCookieA("http://cookie.ex2.com/bar", NULL, buf, &size);
++    ok(!ret && GetLastError() == ERROR_NO_MORE_ITEMS, "got %x (%lu) %s\n", ret, GetLastError(), buf);
++}
++
+ static void test_cookie_attrs(void)
+ {
+     char buf[100];
+@@ -2071,6 +2160,7 @@ START_TEST(internet)
+     test_complicated_cookie();
+     test_cookie_url();
+     test_cookie_attrs();
++    test_InternetSetCookieEx2();
+     test_version();
+     test_null();
+     test_Option_PerConnectionOption();
+diff --git a/dlls/wininet/wininet.spec b/dlls/wininet/wininet.spec
+index 7ef28d6..ddf18ee 100644
+--- a/dlls/wininet/wininet.spec
++++ b/dlls/wininet/wininet.spec
+@@ -185,6 +185,7 @@
+ @ stdcall InternetSetCookieA(str str str)
+ @ stdcall InternetSetCookieExA(str str str long long)
+ @ stdcall InternetSetCookieExW(wstr wstr wstr long long)
++@ stdcall InternetSetCookieEx2(wstr ptr wstr long ptr)
+ @ stdcall InternetSetCookieW(wstr wstr wstr)
+ @ stub InternetSetDialState
+ @ stub InternetSetDialStateA
+diff --git a/include/wininet.h b/include/wininet.h
+index 0de2b83..8cecbc3 100644
+--- a/include/wininet.h
++++ b/include/wininet.h
+@@ -1349,6 +1349,18 @@ DWORD WINAPI InternetSetCookieExA(LPCSTR,LPCSTR,LPCSTR,DWORD,DWORD_PTR);
+ DWORD WINAPI InternetSetCookieExW(LPCWSTR,LPCWSTR,LPCWSTR,DWORD,DWORD_PTR);
+ #define InternetSetCookieEx WINELIB_NAME_AW(InternetSetCookieEx)
+ 
++typedef struct {
++    PWSTR pwszName;
++    PWSTR pwszValue;
++    PWSTR pwszDomain;
++    PWSTR pwszPath;
++    DWORD dwFlags;
++    FILETIME ftExpires;
++    BOOL fExpiresSet;
++} INTERNET_COOKIE2;
++
++DWORD WINAPI InternetSetCookieEx2(LPCWSTR,const INTERNET_COOKIE2*,LPCWSTR,DWORD,DWORD*);
++
+ BOOLAPI InternetGetPerSiteCookieDecisionA(LPCSTR,ULONG *);
+ BOOLAPI InternetGetPerSiteCookieDecisionW(LPCWSTR,ULONG *);
+ #define InternetGetPerSiteCookieDecision WINELIB_NAME_AW(InternetGetPerSiteCookieDecision)
+diff --git a/dlls/shell32/zipfolder.c b/dlls/shell32/zipfolder.c
+new file mode 100644
+index 0000000..c7d0636
+--- /dev/null
++++ b/dlls/shell32/zipfolder.c
+@@ -0,0 +1,371 @@
++/*
++ * ZIP folders for shell automation
++ *
++ * Copyright 2026 Anthony Dragone
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
++ * Lesser General Public License for more details.
++ */
++
++#include <stdarg.h>
++#include "windef.h"
++#include "winbase.h"
++#include "oleauto.h"
++#include "shlobj.h"
++#include "shellapi.h"
++#include "shlwapi.h"
++#include "zlib.h"
++#include "zipfolder.h"
++#include "wine/debug.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(zip);
++
++struct zip_entry
++{
++    WCHAR *name;
++    const BYTE *header;
++    DWORD offset, compressed, size, crc;
++    WORD method;
++};
++
++struct shell_zip
++{
++    const BYTE *data;
++    DWORD directory;
++    unsigned int count;
++    struct zip_entry *entries;
++};
++
++static WORD zip_word(const BYTE *p)
++{
++    return p[0] | (p[1] << 8);
++}
++
++static DWORD zip_dword(const BYTE *p)
++{
++    return zip_word(p) | ((DWORD)zip_word(p + 2) << 16);
++}
++
++/* Win32 normalizes these names, so reject them before building a destination path. */
++static BOOL zip_safe_name(WCHAR *name)
++{
++    WCHAR *p, *component = name;
++    unsigned int length, base;
++
++    if (!*name || *name == '/' || *name == '\\') return FALSE;
++    for (p = name;; p++)
++    {
++        if (*p == '/') *p = '\\';
++        if (*p && *p != '\\')
++        {
++            if (*p < 32 || wcschr(L":*?\"<>|", *p)) return FALSE;
++            continue;
++        }
++        length = p - component;
++        if (!length || component[length - 1] == '.' || component[length - 1] == ' ') return FALSE;
++        for (base = 0; base < length && component[base] != '.'; base++);
++        if (base == 3 && (!wcsnicmp(component, L"CON", 3) || !wcsnicmp(component, L"PRN", 3)
++                || !wcsnicmp(component, L"AUX", 3) || !wcsnicmp(component, L"NUL", 3))) return FALSE;
++        if (base == 4 && component[3] >= '1' && component[3] <= '9'
++                && (!wcsnicmp(component, L"COM", 3) || !wcsnicmp(component, L"LPT", 3))) return FALSE;
++        if (!*p || !p[1]) break;
++        component = p + 1;
++    }
++    return TRUE;
++}
++
++void shell_zip_close(struct shell_zip *zip)
++{
++    unsigned int i;
++
++    if (!zip) return;
++    for (i = 0; i < zip->count; i++) free(zip->entries[i].name);
++    free(zip->entries);
++    if (zip->data) UnmapViewOfFile(zip->data);
++    free(zip);
++}
++
++HRESULT shell_zip_open(const WCHAR *path, struct shell_zip **ret)
++{
++    HANDLE file, mapping;
++    LARGE_INTEGER size;
++    struct shell_zip *zip;
++    const BYTE *end, *p, *limit;
++    DWORD position, minimum, length;
++    unsigned int i;
++    HRESULT hr = S_FALSE;
++
++    *ret = NULL;
++    TRACE("Opening %s\n", debugstr_w(path));
++    if (!(zip = calloc(1, sizeof(*zip)))) return E_OUTOFMEMORY;
++    file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
++    if (file == INVALID_HANDLE_VALUE) goto failed;
++    if (!GetFileSizeEx(file, &size) || size.QuadPart < 22 || size.QuadPart >= 0xffffffff)
++    {
++        CloseHandle(file);
++        goto failed;
++    }
++    mapping = CreateFileMappingW(file, NULL, PAGE_READONLY, 0, 0, NULL);
++    CloseHandle(file);
++    if (!mapping) goto failed;
++    zip->data = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
++    CloseHandle(mapping);
++    if (!zip->data) goto failed;
++    position = size.LowPart - 22;
++    minimum = size.LowPart > 65557 ? size.LowPart - 65557 : 0;
++    for (;; position--)
++    {
++        end = zip->data + position;
++        if (zip_dword(end) == 0x06054b50 && position + 22 + zip_word(end + 20) == size.LowPart) break;
++        if (position == minimum) goto failed;
++    }
++    /* shortcut: classic single-disk ZIP only; add ZIP64 when a caller needs archives over 4 GB. */
++    if (zip_word(end + 4) || zip_word(end + 6) || zip_word(end + 8) != zip_word(end + 10)
++            || zip_word(end + 10) == 0xffff) goto failed;
++    zip->directory = zip_dword(end + 16);
++    length = zip_dword(end + 12);
++    if (zip->directory > position || length != position - zip->directory) goto failed;
++    zip->count = zip_word(end + 10);
++    if (zip->count && !(zip->entries = calloc(zip->count, sizeof(*zip->entries))))
++    {
++        zip->count = 0;
++        hr = E_OUTOFMEMORY;
++        goto failed;
++    }
++    p = zip->data + zip->directory;
++    limit = p + length;
++    for (i = 0; i < zip->count; i++)
++    {
++        struct zip_entry *entry = &zip->entries[i];
++        WORD flags, name_length;
++        int chars;
++
++        if (limit - p < 46 || zip_dword(p) != 0x02014b50) goto failed;
++        flags = zip_word(p + 8);
++        name_length = zip_word(p + 28);
++        length = 46 + name_length + zip_word(p + 30) + zip_word(p + 32);
++        if (length > limit - p || !name_length || memchr(p + 46, 0, name_length)
++                || flags & (1 | 0x40 | 0x2000) || zip_word(p + 34)
++                || (zip_dword(p + 38) >> 16 & 0170000) == 0120000) goto failed;
++        entry->header = p;
++        entry->method = zip_word(p + 10);
++        entry->crc = zip_dword(p + 16);
++        entry->compressed = zip_dword(p + 20);
++        entry->size = zip_dword(p + 24);
++        entry->offset = zip_dword(p + 42);
++        if ((entry->method != 0 && entry->method != 8) || entry->offset >= zip->directory
++                || entry->compressed == 0xffffffff || entry->size == 0xffffffff) goto failed;
++        chars = MultiByteToWideChar(flags & 0x800 ? CP_UTF8 : 437, MB_ERR_INVALID_CHARS,
++                (const char *)p + 46, name_length, NULL, 0);
++        if (!chars)
++        {
++            WARN("Failed to decode ZIP filename, error %lu\n", GetLastError());
++            goto failed;
++        }
++        if (!(entry->name = malloc((chars + 1) * sizeof(WCHAR))))
++        {
++            hr = E_OUTOFMEMORY;
++            goto failed;
++        }
++        MultiByteToWideChar(flags & 0x800 ? CP_UTF8 : 437, MB_ERR_INVALID_CHARS,
++                (const char *)p + 46, name_length, entry->name, chars);
++        entry->name[chars] = 0;
++        if (!zip_safe_name(entry->name)) goto failed;
++        p += length;
++    }
++    if (p != limit) goto failed;
++    *ret = zip;
++    return S_OK;
++
++failed:
++    WARN("Failed to open ZIP %s, hr %#lx\n", debugstr_w(path), hr);
++    shell_zip_close(zip);
++    return hr;
++}
++
++HRESULT shell_zip_names(struct shell_zip *zip, BSTR **names, LONG *count)
++{
++    unsigned int i, j, length;
++    const WCHAR *slash;
++
++    *count = 0;
++    *names = NULL;
++    if (zip->count && !(*names = calloc(zip->count, sizeof(**names)))) return E_OUTOFMEMORY;
++    for (i = 0; i < zip->count; i++)
++    {
++        slash = wcschr(zip->entries[i].name, '\\');
++        length = slash ? slash - zip->entries[i].name : wcslen(zip->entries[i].name);
++        for (j = 0; j < *count; j++)
++            if (SysStringLen((*names)[j]) == length && !wcsnicmp((*names)[j], zip->entries[i].name, length)) break;
++        if (j < *count) continue;
++        if (!((*names)[*count] = SysAllocStringLen(zip->entries[i].name, length))) return E_OUTOFMEMORY;
++        (*count)++;
++    }
++    return S_OK;
++}
++
++DWORD shell_zip_attributes(struct shell_zip *zip, const WCHAR *name)
++{
++    unsigned int i, length = wcslen(name);
++
++    for (i = 0; i < zip->count; i++)
++    {
++        const WCHAR *entry = zip->entries[i].name;
++        if (!wcsnicmp(entry, name, length))
++        {
++            if (entry[length] == '\\') return SFGAO_FOLDER | SFGAO_BROWSABLE;
++            if (!entry[length]) return SFGAO_CANCOPY;
++        }
++    }
++    return 0;
++}
++
++static HRESULT zip_directory(WCHAR *path)
++{
++    DWORD attributes;
++
++    if (!CreateDirectoryW(path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
++        return HRESULT_FROM_WIN32(GetLastError());
++    attributes = GetFileAttributesW(path);
++    if (attributes == INVALID_FILE_ATTRIBUTES) return HRESULT_FROM_WIN32(GetLastError());
++    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY) || attributes & FILE_ATTRIBUTE_REPARSE_POINT)
++        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
++    return S_OK;
++}
++
++static void *zip_alloc(void *opaque, unsigned int count, unsigned int size)
++{
++    return calloc(count, size);
++}
++
++static void zip_free(void *opaque, void *address)
++{
++    free(address);
++}
++
++static HRESULT zip_extract(struct shell_zip *zip, struct zip_entry *entry, const WCHAR *destination, DWORD flags)
++{
++    WCHAR path[MAX_PATH], temporary[MAX_PATH], *p;
++    BYTE buffer[65536];
++    const BYTE *header, *data;
++    DWORD offset, written, attributes;
++    unsigned int length, root, produced;
++    HANDLE file;
++    z_stream stream = {.zalloc = zip_alloc, .zfree = zip_free};
++    ULONG crc = crc32(0, NULL, 0);
++    HRESULT hr;
++    int status;
++
++    root = wcslen(destination);
++    length = wcslen(entry->name);
++    if (root + 1 + length >= ARRAY_SIZE(path)) return HRESULT_FROM_WIN32(ERROR_FILENAME_EXCED_RANGE);
++    wcscpy(path, destination);
++    if (path[root - 1] != '\\') path[root++] = '\\';
++    wcscpy(path + root, entry->name);
++    for (p = path + root; *p; p++)
++    {
++        if (*p != '\\') continue;
++        *p = 0;
++        hr = zip_directory(path);
++        *p = '\\';
++        if (FAILED(hr)) return hr;
++    }
++    if (path[wcslen(path) - 1] == '\\') return S_OK;
++    attributes = GetFileAttributesW(path);
++    if (attributes != INVALID_FILE_ATTRIBUTES && attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))
++        return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
++    if (entry->offset > zip->directory || zip->directory - entry->offset < 30)
++        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++    header = zip->data + entry->offset;
++    if (zip_dword(header) != 0x04034b50 || zip_word(header + 8) != entry->method
++            || zip_word(header + 6) != zip_word(entry->header + 8)
++            || zip_word(header + 26) != zip_word(entry->header + 28))
++        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++    offset = 30 + zip_word(header + 26) + zip_word(header + 28);
++    if (offset > zip->directory - entry->offset
++            || entry->compressed > zip->directory - entry->offset - offset
++            || memcmp(header + 30, entry->header + 46, zip_word(header + 26)))
++        return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++    data = header + offset;
++    p = wcsrchr(path, '\\');
++    *p = 0;
++    status = GetTempFileNameW(path, L"zip", 0, temporary);
++    *p = '\\';
++    if (!status) return HRESULT_FROM_WIN32(GetLastError());
++    file = CreateFileW(temporary, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
++    if (file == INVALID_HANDLE_VALUE)
++    {
++        hr = HRESULT_FROM_WIN32(GetLastError());
++        DeleteFileW(temporary);
++        return hr;
++    }
++    stream.next_in = (BYTE *)data;
++    stream.avail_in = entry->compressed;
++    hr = S_OK;
++    if (entry->method == 8 && inflateInit2(&stream, -MAX_WBITS) != Z_OK) hr = E_FAIL;
++    else
++    {
++        do
++        {
++            if (entry->method == 8)
++            {
++                stream.next_out = buffer;
++                stream.avail_out = sizeof(buffer);
++                status = inflate(&stream, Z_NO_FLUSH);
++                produced = sizeof(buffer) - stream.avail_out;
++            }
++            else
++            {
++                produced = min(stream.avail_in, sizeof(buffer));
++                memcpy(buffer, stream.next_in, produced);
++                stream.next_in += produced;
++                stream.avail_in -= produced;
++                stream.total_in += produced;
++                stream.total_out += produced;
++                status = stream.avail_in ? Z_OK : Z_STREAM_END;
++            }
++            if ((status != Z_OK && status != Z_STREAM_END) || stream.total_out > entry->size)
++            {
++                hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++                break;
++            }
++            crc = crc32(crc, buffer, produced);
++            if (!WriteFile(file, buffer, produced, &written, NULL)) hr = HRESULT_FROM_WIN32(GetLastError());
++            else if (written != produced) hr = HRESULT_FROM_WIN32(ERROR_WRITE_FAULT);
++        } while (SUCCEEDED(hr) && status != Z_STREAM_END);
++        if (SUCCEEDED(hr) && (stream.total_out != entry->size || stream.total_in != entry->compressed || crc != entry->crc))
++            hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++        if (entry->method == 8) inflateEnd(&stream);
++    }
++    if (!CloseHandle(file) && SUCCEEDED(hr)) hr = HRESULT_FROM_WIN32(GetLastError());
++    if (SUCCEEDED(hr) && !MoveFileExW(temporary, path, flags & FOF_NOCONFIRMATION ? MOVEFILE_REPLACE_EXISTING : 0))
++        hr = HRESULT_FROM_WIN32(GetLastError());
++    if (FAILED(hr)) DeleteFileW(temporary);
++    return hr;
++}
++
++HRESULT shell_zip_copy(struct shell_zip *zip, const WCHAR *name, const WCHAR *destination, DWORD flags)
++{
++    DWORD attributes;
++    unsigned int i, length = name ? wcslen(name) : 0;
++    HRESULT hr;
++
++    if (!*destination || PathIsRelativeW(destination)) return E_INVALIDARG;
++    attributes = GetFileAttributesW(destination);
++    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)
++            || attributes & FILE_ATTRIBUTE_REPARSE_POINT) return HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
++    for (i = 0; i < zip->count; i++)
++    {
++        const WCHAR *entry = zip->entries[i].name;
++        if (name && (wcsnicmp(entry, name, length) || (entry[length] && entry[length] != '\\'))) continue;
++        if (FAILED(hr = zip_extract(zip, &zip->entries[i], destination, flags))) return hr;
++    }
++    return S_OK;
++}
+diff --git a/dlls/shell32/zipfolder.h b/dlls/shell32/zipfolder.h
+new file mode 100644
+index 0000000..67e86b4
+--- /dev/null
++++ b/dlls/shell32/zipfolder.h
+@@ -0,0 +1,7 @@
++/* ZIP support for shell automation. */
++struct shell_zip;
++HRESULT shell_zip_open(const WCHAR *path, struct shell_zip **ret);
++void shell_zip_close(struct shell_zip *zip);
++HRESULT shell_zip_names(struct shell_zip *zip, BSTR **names, LONG *count);
++DWORD shell_zip_attributes(struct shell_zip *zip, const WCHAR *name);
++HRESULT shell_zip_copy(struct shell_zip *zip, const WCHAR *name, const WCHAR *destination, DWORD flags);

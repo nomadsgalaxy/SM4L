@@ -1,5 +1,11 @@
 # Install SOLIDWORKS on Arch Linux
 
+## Required HF5.9 update
+
+The original end-to-end steps below were verified with HF4.13. If the platform requires HF5.9, read [HF5.9.md](HF5.9.md) before proceeding. HF5.9 now installs and opens a rendered CAD assembly in an isolated laptop copy with experimental Wine ZIP, cookie and TLS fixes. Those source patches are included in `patches/wine/`; `setup.sh` does not apply or deploy them automatically. Save/reopen, repeat-start stability and desktop replication on HF5.9 remain unverified.
+
+The existing IE prerequisite workaround also matches the HF5.9 bootstrap. The guarded CATSysTS helper and recopy watcher now recognize its new stock DLL. An update can replace compatibility DLLs before dictionary compilation, so preserve the original backup and use the watcher procedure below. Don't infer success from DisplayVersion alone: check the dictionary action, final installer result and a real CAD launch.
+
 This is the full path, in order. It's verified end to end on two reference machines: an Intel Mesa laptop and an NVIDIA desktop, both on CachyOS (Arch-based) with KDE Plasma on Wayland. The desktop was a fresh install from this guide on 2026-10-08. The AMD graphics path is untested. Check each step's result before you move on anyway.
 
 `setup.sh` in the repository root runs the scriptable steps in this order. `./setup.sh --plan` shows where you are and changes nothing. The media step checks the vendor files before the installer runs, and the offline-patch step checks the patched copy byte for byte. It's pending a live test, so this guide is the reference.

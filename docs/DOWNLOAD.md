@@ -1,5 +1,7 @@
 # Download the installer from Linux
 
+**HF5.9 update, October 13, 2026:** the platform required a newer hotfix after the HF4.13 download documented below. The cached HF5.9 update archive was much smaller than the original full-media download; its filename alone does not imply it contains every initial-install payload. See [HF5.9.md](HF5.9.md) for the tested update route, source patches and current limits. Keep exact media filenames and checksum guards; don't rename another release to match the old instructions.
+
 The 3DEXPERIENCE site hides the desktop SOLIDWORKS options when it sees a Linux browser. Picking a Chrome–Windows label in the site didn't reliably bring the app back. What worked was a dedicated Firefox profile where both the HTTP User-Agent **and** the JavaScript platform/OS fields say Windows.
 
 You can do this before installing Proton or starting the Windows launcher service. The launcher service only matters later, for the browser's Open button.

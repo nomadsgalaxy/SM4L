@@ -25,6 +25,12 @@ SM4L is verified end to end on two machines. Both run CachyOS (Arch-based) on ke
 
 Both are verified end to end: launch from the menu entry and the browser Open button, the viewport with Enhanced graphics performance off, the labels and headers, the SpaceMouse, save and reopen, 3MF export, and the speed fixes. The package and driver versions are in [tested-versions.json](docs/tested-versions.json).
 
+## HF5.9 update checkpoint — October 13, 2026
+
+HF5.9 installed and launched CAD from the real platform Open button in an isolated copy on the Intel laptop. An assembly opened with its model rendered. This required Wine fixes for ZIP folders, `InternetSetCookieEx2` and static TLS registration through the private `LdrpHandleTlsData` interface, plus the updated CATSysTS checksum guard. The original live prefix and shared Proton runtime were preserved.
+
+The source patch, exact base revision, build notes, tests and rollback limits are in [HF5.9.md](docs/HF5.9.md). This is an experimental x64 checkpoint: HF5.9 save/reopen, repeat-start stability, broader loader testing and desktop replication remain open. The older two-machine verification above describes the HF4.13 setup; it must not be read as HF5.9 coverage. `setup.sh` does not install the new Wine patch automatically.
+
 ## Quick start
 
 1. Get the vendor media. [DOWNLOAD.md](docs/DOWNLOAD.md) explains the Windows-identifying Firefox profile and how to find the full download. Your account needs the desktop app assigned.
@@ -56,6 +62,8 @@ If something fails, check [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) before y
 - The theme setting is re-applied before each start by `setup/ensure_theme_off.py`. That isn't confirmed in a real start yet.
 
 ## Known issues
+
+Required platform hotfixes can introduce Wine dependencies. Test each update in a copied prefix and runtime first. For HF5.9's observed failures and the working startup checkpoint, use [HF5.9.md](docs/HF5.9.md).
 
 | Issue | Status | Workaround |
 | --- | --- | --- |
@@ -106,6 +114,7 @@ The repository leaves out vendor payloads, installed prefixes, cookies, launch t
 | `tests/` | Assert-based checks for the scripts above |
 | `experiments/` | Unverified or diagnostic tools, and native probes. Don't run these as part of the install |
 | `docs/` | The guides, the findings record and `tested-versions.json` |
+| `patches/wine/` | Experimental Wine source patches for the HF5.9 update; see their README for licensing and the pinned base |
 
 Run the checks in [INSTALL.md](docs/INSTALL.md) before patching anything. Every patch checks the file's hash first. If one refuses, you have a different build, so stop and look at it. Don't remove the guard.
 
@@ -113,4 +122,4 @@ Run the checks in [INSTALL.md](docs/INSTALL.md) before patching anything. Every 
 
 SM4L is free software under the [GNU General Public License v3.0](LICENSE). Copyright 2026 Anthony Dragone.
 
-The license covers the scripts, the add-in source and the documentation in this repository. It doesn't cover SOLIDWORKS, the 3DEXPERIENCE platform, Microsoft components, Proton, UMU or any other vendor software. You need your own licenses and media for those.
+The Wine changes under `patches/wine/` retain Wine's LGPL-2.1-or-later terms; see [their README](patches/wine/README.md). The GPL license covers the SM4L scripts, the add-in source and the documentation in this repository. It doesn't cover SOLIDWORKS, the 3DEXPERIENCE platform, Microsoft components, Proton, UMU or any other vendor software. You need your own licenses and media for those.

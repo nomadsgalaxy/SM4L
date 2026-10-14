@@ -2,6 +2,21 @@
 
 These are the fixes from October 6–7, 2026 that held. The commands and final settings are collected in [INSTALL.md](INSTALL.md). Before this, I spent some time on native geometry experiments, but none of that was used to actually run SOLIDWORKS, so it's not in SM4L.
 
+## HF5.9 update — October 13, 2026
+
+The isolated Intel-laptop copy completed the HF5.9 installer and opened a rendered CAD assembly through the platform Open button. The live prefix and shared Proton runtime were preserved. [HF5.9.md](HF5.9.md) records the source patch, checks, build/deployment notes and remaining validation.
+
+| Failure | Compatibility finding | Result |
+| --- | --- | --- |
+| Update Now: `UnzipInt` / `hr=S_FALSE` | Missing ZIP-folder shell automation and CopyHere | Wine shell32 support; 483 checks passed, 16 existing todo checks; all 209 files in the real update ZIP matched SHA256 |
+| IE10 prerequisite / elevation error | Missing `HttpWebSocketReceive` presence check; no-UAC bootstrap needs launcher's pipe context | Existing guarded, separately named admin bootstrap copy; no WebSocket implementation added |
+| Missing CAFS payload in a direct retry | Original `--multi` download/cache/component input was omitted | Fresh copied prefix with original local input; auth data stays private |
+| OM dictionary compiler `rc=1` | Update replaced CATSysTS with a new stock build | Added its exact checksum after confirming all 196 KERNEL32 imports matched; recopy watcher restored the real matcher; installer dictionary and final close returned 0 |
+| HF5.9 startup crash at cookie API | Wine lacked `InternetSetCookieEx2` | WinINet implementation and tests; 1,719 checks passed |
+| JS0PCC load rejection / null call | Custom PE loader scans ntdll for private static-TLS registration support | Real `LdrpHandleTlsData` / release wrappers with x64 discovery metadata; synthetic TLS checks and 26 thread checks passed; CAD opened |
+
+The initial interpretation that successful API calls ruled out another Wine fix was wrong. The caller inspected raw ntdll PE sections between calls. That private TLS ABI dependency failed before the manually mapped module could run normally. The fix initializes actual per-thread data; no license decision or vendor licensing binary was changed. The x64 discovery layout is experimental, and full loader/lifecycle testing remains open.
+
 ## Fixes that stuck
 
 | What broke | What I found | What I kept |

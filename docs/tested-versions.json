@@ -1,6 +1,25 @@
 {
   "status": "Verified end to end on two reference machines: a laptop with Intel Mesa graphics and a desktop with an NVIDIA GPU.",
   "date": "2026-10-08",
+  "hf59_checkpoint": {
+    "date": "2026-10-13",
+    "status": "Experimental copied-prefix Intel laptop checkpoint; the older reference-machine coverage below remains HF4.13 history.",
+    "platform": "V6R2026x.HF5.9",
+    "SPlevel": "428.6.9",
+    "wine_base": "b8fdff8e1f855b5276ec4ddca0f31b2792554322",
+    "runtime": "Isolated UMU-Proton-10.0-4 with the source patches in patches/wine",
+    "CATSysTS_stock_sha256": "1786dbca6b75a66d5cb7156b797135b44a0ccfeaff12780d89a92989175bc559",
+    "ntdll_test_build_sha256": "a33cc061a001d10ad640319c7b6e4e9f25ab52bf295f145b5a2216f3b1ed4d61",
+    "verified": [
+      "483 shell automation checks, no failures, 16 existing todo checks; all 209 real update files matched SHA256.",
+      "1719 WinINet checks passed after InternetSetCookieEx2 implementation.",
+      "Synthetic TLS template, zero fill, existing/new threads, isolation and release; 26 ntdll thread checks passed.",
+      "Installer dictionary action and final close returned 0; all four selected components installed.",
+      "Real platform Open launched CAD and an assembly rendered; user confirmation and screenshot."
+    ],
+    "unverified": ["HF5.9 save/reopen and modeling", "Repeated start/exit stability", "Full loader/lifecycle/exception regression", "HF5.9 desktop replication", "Live deployment"],
+    "note": "No Windows control was available. The ntdll test executable has no loader test; that attempted invocation was rejected, not passed."
+  },
   "shared_pins": {
     "umu": "1.4.4",
     "umu_zipapp_sha256": "d0005a58602041229cc467dab03dc0c0b9e8cce09a8145b16b7683244cf17804",
